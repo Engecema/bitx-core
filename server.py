@@ -1,30 +1,45 @@
-import json
-import urllib.request
-import base64
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import json, os
+USERS_FILE = "usuarios_config.json"
+if not os.path.exists(USERS_FILE):
+    with open(USERS_FILE, "w") as f: json.dump({"admin": "bitx123"}, f)
 
-def rpc_call(m, p=[]):
-    rpc_url = 'http://127.0.0.1:18443'
-    auth = base64.b64encode(b'bitxuser:bitxpassword').decode('utf-8')
-    data = json.dumps({'jsonrpc': '2.0', 'id': 'site', 'method': m, 'params': p}).encode('utf-8')
-    req = urllib.request.Request(rpc_url, data=data, headers={'Authorization': f'Basic {auth}', 'Content-Type': 'application/json'})
-    try:
-        with urllib.request.urlopen(req) as res:
-            parsed = json.loads(res.read().decode('utf-8'))
-            return parsed.get('result', parsed)
-    except Exception as e:
-        return {'error': str(e)}
-
-class BridgeHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
+class AuthHandler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        if self.path == '/info': res = rpc_call('getblockchaininfo')
-        elif self.path == '/balance': res = rpc_call('getbalance')
-        else: res = {'error': 'Rota nao encontrada'}
-        self.wfile.write(json.dumps(res).encode('utf-8'))
+
+    def do_POST(self):
+        self.do_OPTIONS()
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        data = json.loads(post_data.decode('utf-8'))
+        
+        with open(USERS_FILE, 'r') as f:
+            users = json.load(f)
+
+        action = data.get('action')
+        u, p = data.get('user'), data.get('password')
+
+        if action == 'register':
+            users[u] = p
+            with open(USERS_FILE, 'w') as f: json.dump(users, f)
+            response = {"status": "success", "message": "Cadastrado globalmente"}
+        elif action == 'login':
+            if users.get(u) == p:
+                response = {"status": "success", "message": "Acesso concedido"}
+            else:
+                response = {"status": "error", "message": "Incorreto"}
+
+        self.wfile.write(json.dumps(response).encode('utf-8'))
+
+def run():
+    server = HTTPServer(('0.0.0.0', 8080), AuthHandler)
+    print("Servidor BitX Core rodando na porta 8080...")
+    server.serve_forever()
 
 if __name__ == '__main__':
-    HTTPServer(('0.0.0.0', 8000), BridgeHandler).serve_forever()
+    run()
