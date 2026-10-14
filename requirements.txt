@@ -1,0 +1,1 @@
+# Dependencias Python para o Web Service no Render
