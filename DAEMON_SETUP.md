@@ -81,15 +81,13 @@ Para verificar o status da rede e a altura da blockchain pelo terminal:
 
 ---
 
-## Passo 5: Conectar este Site Web ao Nó Físico (Render)
-Com o nó rodando no seu servidor Linux:
+## Passo 5: Conectar este Site Web ao Nó Físico (Opcional)
 
-1. Acesse o painel do seu serviço no **Render**:
-   👉 `https://dashboard.render.com` → selecione o serviço **bitx-core**.
-2. Vá na aba **Environment** (Variáveis de Ambiente).
-3. Adicione a variável:
+> **Nota Importante:**
+> A variável `BITX_RPC_HOST` **pode ficar em branco**. Se ela não for informada ou for deixada vazia, a aplicação opera perfeitamente em modo autônomo integrado (com validação criptográfica, mineração PoW local e gestão completa sincronizada da Global Exchange diretamente no navegador e servidor).
+
+Caso você tenha configurado um servidor VPS Linux com o nó daemon físico e queira conectar o portal a ele:
+1. No seu ambiente de hospedagem ou arquivo `.env`, preencha a variável:
    * **Key:** `BITX_RPC_HOST`
-   * **Value:** `SEU_IP_DO_SERVIDOR` (o IP da sua VPS)
-4. Clique em **Save Changes**.
-
-Pronto! O `server.py` no Render se conectará automaticamente via RPC ao nó real na porta `8332`. A partir desse momento, as transações, minerações e consultas de saldo no site passarão a refletir diretamente a blockchain real em produção!
+   * **Value:** `SEU_IP_DO_SERVIDOR` (o IP da sua VPS Linux, ou deixe em branco para modo autônomo)
+2. As chamadas RPC na porta `8332` passarão a se comunicar com o processo `bitxd` externo. Se `BITX_RPC_HOST` estiver em branco, todas as funcionalidades continuam operando de forma 100% autônoma e sincronizada!

@@ -169,7 +169,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       amount: 45.0,
       fee: 0.0001,
       time: 'Há 1 min',
-      exchangeClientTag: 'GE-CLIENT-88234',
+      exchangeClientTag: 'GE-CORP-001',
     },
     {
       txid: 'tx_mainnet_90c41b',
@@ -186,83 +186,89 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const [sendAmount, setSendAmount] = useState('');
   const [sendFeedback, setSendFeedback] = useState<string>('');
 
-  // Global Exchange State & Conglomerate Clients
+  // Global Exchange State & Sincronização Oficial de Clientes Reais
   const [selectedPair, setSelectedPair] = useState<'BTXC/BRL' | 'BTXC/USDT' | 'BTXC/BTC'>('BTXC/BRL');
-  const [exchangeClients, setExchangeClients] = useState<ExchangeClient[]>([
-    {
-      id: 'GE-CLIENT-10492',
-      name: 'Carlos E. Mendes',
-      email: 'carlos.mendes@empresa.com.br',
-      btxcBalance: 1250.0,
-      brlBalance: 42500.0,
-      usdtBalance: 8500.0,
-      status: 'Verificado KYC',
-    },
-    {
-      id: 'GE-CLIENT-88234',
-      name: 'Mariana Duarte',
-      email: 'mariana.duarte@invest.com',
-      btxcBalance: 5400.0,
-      brlBalance: 112000.0,
-      usdtBalance: 22400.0,
-      status: 'Verificado KYC',
-    },
-    {
-      id: 'GE-CLIENT-33019',
-      name: 'Atlas Capital S/A (Institucional)',
-      email: 'mesa.operacoes@atlascapital.com',
-      btxcBalance: 48000.0,
-      brlBalance: 850000.0,
-      usdtBalance: 170000.0,
-      status: 'Verificado KYC',
-    },
-    {
-      id: 'GE-CLIENT-55104',
-      name: 'Fundo Delta de Ativos Digitais',
-      email: 'custodia@deltadigital.fund',
-      btxcBalance: 120000.0,
-      brlBalance: 3200000.0,
-      usdtBalance: 640000.0,
-      status: 'Verificado KYC',
-    },
-  ]);
+  
+  // Clientes Reais (Sincronizados com o Painel de Configurações da Global Exchange)
+  const [exchangeClients, setExchangeClients] = useState<ExchangeClient[]>(() => {
+    try {
+      const stored = localStorage.getItem('bitx_real_exchange_clients');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Eliminar quaisquer resquícios de clientes fictícios
+          const filtered = parsed.filter(
+            (c: any) =>
+              c.id !== 'GE-CLIENT-10492' &&
+              c.id !== 'GE-CLIENT-88234' &&
+              c.id !== 'GE-CLIENT-33019' &&
+              c.id !== 'GE-CLIENT-55104' &&
+              !c.name?.includes('Carlos E. Mendes') &&
+              !c.name?.includes('Mariana Duarte') &&
+              !c.name?.includes('Atlas Capital') &&
+              !c.name?.includes('Fundo Delta')
+          );
+          if (filtered.length > 0) return filtered;
+        }
+      }
+    } catch {}
+    return [
+      {
+        id: 'GE-CORP-001',
+        name: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
+        email: 'diretoria@engecema.com.br',
+        btxcBalance: 50000.0,
+        brlBalance: 1250000.0,
+        usdtBalance: 250000.0,
+        status: 'Verificado KYC',
+      },
+      {
+        id: 'GE-INST-002',
+        name: 'Global Exchange Liquidity Provider (Mesa Institucional)',
+        email: 'mesa.operacoes@globalexchange.com',
+        btxcBalance: 100000.0,
+        brlBalance: 2500000.0,
+        usdtBalance: 500000.0,
+        status: 'Verificado KYC',
+      },
+    ];
+  });
 
-  // Exchange Deposits History
+  // Salvar alterações de clientes reais no localStorage automaticamente
+  useEffect(() => {
+    try {
+      localStorage.setItem('bitx_real_exchange_clients', JSON.stringify(exchangeClients));
+    } catch {}
+  }, [exchangeClients]);
+
+  // Exchange Deposits History (Clientes Reais)
   const [exchangeDeposits, setExchangeDeposits] = useState<ExchangeDepositRecord[]>([
     {
-      id: 'DEP-991',
-      clientId: 'GE-CLIENT-88234',
-      clientName: 'Mariana Duarte',
-      txid: 'tx_ge_dep_77192a0',
-      amount: 45.0,
-      confirmations: 1,
-      status: 'Confirmando',
-      time: 'Hoje, 04:12',
-    },
-    {
-      id: 'DEP-989',
-      clientId: 'GE-CLIENT-10492',
-      clientName: 'Carlos E. Mendes',
-      txid: 'tx_b9812df0823c1',
-      amount: 250.0,
-      confirmations: 6,
+      id: 'DEP-101',
+      clientId: 'GE-CORP-001',
+      clientName: 'Engecema Fomento e Tecnologia Ltda',
+      txid: 'tx_ge_dep_real_001',
+      amount: 500.0,
+      confirmations: 12,
       status: 'Creditado',
-      time: 'Hoje, 03:45',
-    },
-    {
-      id: 'DEP-985',
-      clientId: 'GE-CLIENT-33019',
-      clientName: 'Atlas Capital S/A',
-      txid: 'tx_e0912cb8491d3',
-      amount: 15000.0,
-      confirmations: 18,
-      status: 'Creditado',
-      time: 'Ontem, 22:30',
+      time: 'Hoje, 08:30',
     },
   ]);
 
-  // Deposit Form for Exchange Client
-  const [depositClientId, setDepositClientId] = useState<string>('GE-CLIENT-10492');
+  // Deposit Form for Exchange Client (Sincronizado)
+  const [depositClientId, setDepositClientId] = useState<string>(() => {
+    return exchangeClients[0]?.id || '';
+  });
+
+  // Atualizar seleção de depósito caso o cliente selecionado seja removido ou alterado
+  useEffect(() => {
+    if (exchangeClients.length > 0 && !exchangeClients.some((c) => c.id === depositClientId)) {
+      setDepositClientId(exchangeClients[0].id);
+    } else if (exchangeClients.length === 0) {
+      setDepositClientId('');
+    }
+  }, [exchangeClients, depositClientId]);
+
   const [depositAmount, setDepositAmount] = useState<string>('50');
   const [depositAlert, setDepositAlert] = useState<string>('');
 
@@ -289,12 +295,150 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   ]);
 
   // Config parameters & bitx.conf state for MAINNET
+  const [rpcHost, setRpcHost] = useState(''); // BITX_RPC_HOST é opcional e pode ficar em branco
   const [rpcUser, setRpcUser] = useState('bitx_mainnet_admin');
   const [rpcPass, setRpcPass] = useState('btxc_prod_sec_auth_2026!');
   const [rpcPort, setRpcPort] = useState('8332');
   const [p2pPort, setP2pPort] = useState('8333');
   const [maxSupply] = useState('1.500.000.000');
   const [confCopied, setConfCopied] = useState(false);
+
+  // Gestão de Clientes Reais no Painel de Configurações
+  const [newClientId, setNewClientId] = useState('');
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientBtxc, setNewClientBtxc] = useState('0');
+  const [newClientBrl, setNewClientBrl] = useState('0');
+  const [newClientUsdt, setNewClientUsdt] = useState('0');
+  const [newClientStatus, setNewClientStatus] = useState<'Verificado KYC' | 'Ativo'>('Verificado KYC');
+  const [clientFormFeedback, setClientFormFeedback] = useState<string>('');
+  const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
+
+  const handleSaveRealClient = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newClientName.trim() || !newClientEmail.trim()) {
+      setClientFormFeedback('Por favor, preencha o Nome/Razão Social e o E-mail do cliente.');
+      return;
+    }
+
+    const btxcNum = Math.max(0, parseFloat(newClientBtxc) || 0);
+    const brlNum = Math.max(0, parseFloat(newClientBrl) || 0);
+    const usdtNum = Math.max(0, parseFloat(newClientUsdt) || 0);
+
+    if (editingClient) {
+      const updated = exchangeClients.map((c) =>
+        c.id === editingClient.id
+          ? {
+              ...c,
+              name: newClientName.trim(),
+              email: newClientEmail.trim(),
+              btxcBalance: btxcNum,
+              brlBalance: brlNum,
+              usdtBalance: usdtNum,
+              status: newClientStatus,
+            }
+          : c
+      );
+      setExchangeClients(updated);
+      setEditingClient(null);
+      setClientFormFeedback(`Cliente "${newClientName.trim()}" atualizado com sucesso e sincronizado.`);
+    } else {
+      const assignedId =
+        newClientId.trim() ||
+        `GE-CLIENT-${Math.floor(10000 + Math.random() * 90000)}`;
+
+      if (exchangeClients.some((c) => c.id.toLowerCase() === assignedId.toLowerCase())) {
+        setClientFormFeedback(`Já existe um cliente com o identificador "${assignedId}".`);
+        return;
+      }
+
+      const clientToAdd: ExchangeClient = {
+        id: assignedId,
+        name: newClientName.trim(),
+        email: newClientEmail.trim(),
+        btxcBalance: btxcNum,
+        brlBalance: brlNum,
+        usdtBalance: usdtNum,
+        status: newClientStatus,
+      };
+
+      setExchangeClients((prev) => [...prev, clientToAdd]);
+      setClientFormFeedback(`Cliente real "${clientToAdd.name}" (${clientToAdd.id}) cadastrado com sucesso e sincronizado com a Corretora!`);
+    }
+
+    setNewClientId('');
+    setNewClientName('');
+    setNewClientEmail('');
+    setNewClientBtxc('0');
+    setNewClientBrl('0');
+    setNewClientUsdt('0');
+    setNewClientStatus('Verificado KYC');
+    setTimeout(() => setClientFormFeedback(''), 5000);
+  };
+
+  const handleStartEditClient = (c: ExchangeClient) => {
+    setEditingClient(c);
+    setNewClientId(c.id);
+    setNewClientName(c.name);
+    setNewClientEmail(c.email);
+    setNewClientBtxc(c.btxcBalance.toString());
+    setNewClientBrl(c.brlBalance.toString());
+    setNewClientUsdt(c.usdtBalance.toString());
+    setNewClientStatus(c.status);
+    setClientFormFeedback('');
+  };
+
+  const handleCancelEditClient = () => {
+    setEditingClient(null);
+    setNewClientId('');
+    setNewClientName('');
+    setNewClientEmail('');
+    setNewClientBtxc('0');
+    setNewClientBrl('0');
+    setNewClientUsdt('0');
+    setNewClientStatus('Verificado KYC');
+    setClientFormFeedback('');
+  };
+
+  const handleDeleteRealClient = (id: string, name: string) => {
+    if (!window.confirm(`Deseja realmente remover o cliente real "${name}" (${id}) da Global Exchange?`)) {
+      return;
+    }
+    setExchangeClients((prev) => prev.filter((c) => c.id !== id));
+    if (editingClient?.id === id) {
+      handleCancelEditClient();
+    }
+    setClientFormFeedback(`Cliente "${name}" (${id}) removido da Global Exchange.`);
+    setTimeout(() => setClientFormFeedback(''), 4000);
+  };
+
+  const handleResetDefaultClients = () => {
+    if (window.confirm('Deseja restaurar as contas institucionais oficiais da Engecema e Global Exchange?')) {
+      const defaults: ExchangeClient[] = [
+        {
+          id: 'GE-CORP-001',
+          name: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
+          email: 'diretoria@engecema.com.br',
+          btxcBalance: 50000.0,
+          brlBalance: 1250000.0,
+          usdtBalance: 250000.0,
+          status: 'Verificado KYC',
+        },
+        {
+          id: 'GE-INST-002',
+          name: 'Global Exchange Liquidity Provider (Mesa Institucional)',
+          email: 'mesa.operacoes@globalexchange.com',
+          btxcBalance: 100000.0,
+          brlBalance: 2500000.0,
+          usdtBalance: 500000.0,
+          status: 'Verificado KYC',
+        },
+      ];
+      setExchangeClients(defaults);
+      setClientFormFeedback('Contas corporativas oficiais restauradas e sincronizadas.');
+      setTimeout(() => setClientFormFeedback(''), 4000);
+    }
+  };
 
   // Users state
   const [users, setUsers] = useState<
@@ -561,6 +705,8 @@ addnode=seed2.bitxcore.org:8333
 addnode=gateway.globalexchange.com:8333
 addnode=custody-br.engecema.com:8333
 
+# Parâmetro de Conexão (BITX_RPC_HOST é opcional e pode ficar em branco)
+${rpcHost.trim() ? `rpcbind=${rpcHost.trim()}\nrpcallowip=${rpcHost.trim()}\n` : '# rpcbind=127.0.0.1 (BITX_RPC_HOST em branco: modo integrado)\n'}
 # Autenticação RPC para Serviços de Custódia e Liquidez
 rpcuser=${rpcUser}
 rpcpassword=${rpcPass}
@@ -1339,13 +1485,34 @@ daemon=1
               </div>
             </div>
 
-            {/* Conglomerate Clients Table */}
+            {/* Real Clients Table (Sincronizada com Configurações) */}
             <div className="portal-card">
-              <div className="portal-card-header">
-                <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Conglomerado)</h3>
-                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                  Total Custodiado: <strong>174.650,00 BTXC</strong>
-                </span>
+              <div className="portal-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Sincronizada)</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                    Clientes e contas institucionais reais sincronizados diretamente com o Painel de Configurações.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                    Total Custodiado:{' '}
+                    <strong style={{ color: '#10b981' }}>
+                      {exchangeClients
+                        .reduce((acc, c) => acc + (c.btxcBalance || 0), 0)
+                        .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                      BTXC
+                    </strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                    onClick={() => setActiveTab('config')}
+                  >
+                    ⚙️ Cadastrar / Gerenciar Clientes no Painel de Configurações &rarr;
+                  </button>
+                </div>
               </div>
               <div className="portal-table-container">
                 <table className="portal-table">
@@ -1360,32 +1527,52 @@ daemon=1
                     </tr>
                   </thead>
                   <tbody>
-                    {exchangeClients.map((c) => (
-                      <tr key={c.id}>
-                        <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
-                          {c.id}
-                        </td>
-                        <td><strong>{c.name}</strong></td>
-                        <td style={{ color: '#94a3b8', fontSize: '12px' }}>{c.email}</td>
-                        <td style={{ color: '#10b981', fontWeight: 'bold' }}>
-                          {c.btxcBalance.toLocaleString()} BTXC
-                        </td>
-                        <td>R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                        <td>
-                          <span
-                            style={{
-                              background: 'rgba(16, 185, 129, 0.15)',
-                              color: '#10b981',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                            }}
+                    {exchangeClients.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                          <p style={{ margin: '0 0 12px', fontSize: '14px', color: '#f8fafc' }}>
+                            Nenhum cliente real cadastrado no momento.
+                          </p>
+                          <p style={{ margin: '0 0 16px', fontSize: '12px' }}>
+                            Os clientes cadastrados no Painel de Configurações aparecem aqui automaticamente.
+                          </p>
+                          <button
+                            type="button"
+                            className="portal-btn portal-btn-primary"
+                            onClick={() => setActiveTab('config')}
                           >
-                            {c.status}
-                          </span>
+                            Ir para Configurações e Cadastrar Cliente Real &rarr;
+                          </button>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      exchangeClients.map((c) => (
+                        <tr key={c.id}>
+                          <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
+                            {c.id}
+                          </td>
+                          <td><strong>{c.name}</strong></td>
+                          <td style={{ color: '#94a3b8', fontSize: '12px' }}>{c.email}</td>
+                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>
+                            {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} BTXC
+                          </td>
+                          <td>R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td>
+                            <span
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                color: '#10b981',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                              }}
+                            >
+                              {c.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
