@@ -5,8 +5,10 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
 import { bech32 } from '@scure/base';
 
-export const STORAGE_KEY = 'bitx-regtest-wallet-v1';
-export const DERIVATION_PATH = "m/84'/1'/0'";
+export const STORAGE_KEY = 'bitx-mainnet-wallet-v1';
+export const REGTEST_STORAGE_KEY = 'bitx-regtest-wallet-v1';
+export const DERIVATION_PATH = "m/84'/0'/0'";
+export const REGTEST_DERIVATION_PATH = "m/84'/1'/0'";
 export const PBKDF2_ITERATIONS = 310000;
 
 const encoder = new TextEncoder();
@@ -14,7 +16,7 @@ const decoder = new TextDecoder();
 
 export interface EncryptedWalletRecord {
   version: number;
-  network: string;
+  network: 'mainnet' | 'regtest';
   kdf: string;
   iterations: number;
   cipher: string;
@@ -57,7 +59,11 @@ async function deriveEncryptionKey(password: string, salt: Uint8Array): Promise<
   );
 }
 
-export async function encryptMnemonic(mnemonic: string, password: string): Promise<EncryptedWalletRecord> {
+export async function encryptMnemonic(
+  mnemonic: string,
+  password: string,
+  network: 'mainnet' | 'regtest' = 'mainnet'
+): Promise<EncryptedWalletRecord> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveEncryptionKey(password, salt);
@@ -69,7 +75,7 @@ export async function encryptMnemonic(mnemonic: string, password: string): Promi
   );
   return {
     version: 1,
-    network: 'regtest',
+    network,
     kdf: 'PBKDF2-SHA256',
     iterations: PBKDF2_ITERATIONS,
     cipher: 'AES-256-GCM',
@@ -81,7 +87,11 @@ export async function encryptMnemonic(mnemonic: string, password: string): Promi
 }
 
 export async function decryptMnemonic(record: EncryptedWalletRecord, password: string): Promise<string> {
-  if (record.version !== 1 || record.network !== 'regtest' || record.kdf !== 'PBKDF2-SHA256') {
+  if (
+    record.version !== 1 ||
+    (record.network !== 'regtest' && record.network !== 'mainnet') ||
+    record.kdf !== 'PBKDF2-SHA256'
+  ) {
     throw new Error('Formato de carteira não reconhecido.');
   }
   const saltBytes = base64ToBytes(record.salt);
@@ -99,10 +109,13 @@ export async function decryptMnemonic(record: EncryptedWalletRecord, password: s
 
 export function readStoredWallet(): EncryptedWalletRecord | null {
   try {
-    const value = localStorage.getItem(STORAGE_KEY);
+    let value = localStorage.getItem(STORAGE_KEY);
+    if (!value) {
+      value = localStorage.getItem(REGTEST_STORAGE_KEY);
+    }
     if (!value) return null;
     const record = JSON.parse(value);
-    if (record.network !== 'regtest' || typeof record.ciphertext !== 'string') return null;
+    if (typeof record.ciphertext !== 'string') return null;
     return record;
   } catch {
     return null;
@@ -110,11 +123,13 @@ export function readStoredWallet(): EncryptedWalletRecord | null {
 }
 
 export function saveStoredWallet(record: EncryptedWalletRecord) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
+  const key = record.network === 'regtest' ? REGTEST_STORAGE_KEY : STORAGE_KEY;
+  localStorage.setItem(key, JSON.stringify(record));
 }
 
 export function removeStoredWallet() {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(REGTEST_STORAGE_KEY);
 }
 
 export function generateMnemonicPhrase(): string {
@@ -125,13 +140,23 @@ export function validateMnemonicPhrase(phrase: string): boolean {
   return bip39.validateMnemonic(phrase.trim().toLowerCase().replace(/\s+/g, ' '), wordlist);
 }
 
-export async function deriveAddressFromMnemonic(mnemonic: string, branch = 0, index = 0): Promise<string> {
+export async function deriveAddressFromMnemonic(
+  mnemonic: string,
+  branch = 0,
+  index = 0,
+  network: 'mainnet' | 'regtest' = 'mainnet'
+): Promise<string> {
   const seed = await bip39.mnemonicToSeed(mnemonic);
   const master = HDKey.fromMasterSeed(seed);
-  const child = master.derive(`m/84'/1'/0'/${branch}/${index}`);
-  if (!child.publicKey) throw new Error('Não foi possível derivar o endereço regtest.');
+  const path =
+    network === 'mainnet'
+      ? `m/84'/0'/0'/${branch}/${index}`
+      : `m/84'/1'/0'/${branch}/${index}`;
+  const child = master.derive(path);
+  if (!child.publicKey) throw new Error(`Não foi possível derivar o endereço ${network}.`);
   const sha = sha256(child.publicKey);
   const ripe = ripemd160(sha);
   const words = [0, ...bech32.toWords(ripe)];
-  return bech32.encode('bxrt', words);
+  const hrp = network === 'mainnet' ? 'btxc' : 'bxrt';
+  return bech32.encode(hrp, words);
 }

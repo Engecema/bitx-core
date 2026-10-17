@@ -1,6 +1,6 @@
 {
-  "name": "BitX Core",
-  "description": "Painel de controle BitX Core (BTXC) e carteira regtest de autocustódia com derivação BIP-84.",
+  "name": "BitX Core (BTXC) — Rede Principal & Global Exchange",
+  "description": "Rede Principal de Produção BitX Core (BTXC), mineração PoW, carteira de autocustódia BIP-84 e integração com a corretora Global Exchange.",
   "permissions": [],
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

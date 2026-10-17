@@ -464,3 +464,110 @@
   .portal-body { padding: 16px; }
   .portal-stats-grid { grid-template-columns: 1fr; }
 }
+
+/* Global Exchange Integration Styles */
+.portal-exchange-banner {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid #334155;
+  border-left: 4px solid #f97316;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.portal-exchange-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.portal-exchange-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .portal-exchange-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.portal-pair-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.portal-pair-btn {
+  padding: 8px 16px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.portal-pair-btn.is-active {
+  background: #f97316;
+  border-color: #ea580c;
+  color: #ffffff;
+}
+
+.portal-orderbook {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.portal-ob-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+
+.portal-ob-table th {
+  text-align: left;
+  color: #64748b;
+  padding: 6px 8px;
+  border-bottom: 1px solid #334155;
+  font-size: 11px;
+}
+
+.portal-ob-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #1e293b;
+  font-family: 'DM Mono', monospace;
+}
+
+.portal-ob-bid {
+  color: #10b981;
+}
+
+.portal-ob-ask {
+  color: #ef4444;
+}
+
+.portal-client-card {
+  background: #151e32;
+  border: 1px solid #293856;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+

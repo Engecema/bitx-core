@@ -1,27 +1,30 @@
-# BitX Core (BTXC) - Web App
+# BitX Core (BTXC) — Rede Principal & Global Exchange
 
-Aplicação web completa em React com TypeScript e Vite para o ecossistema **BitX Core (BTXC)** em rede Regtest.
+Aplicação web completa em React com TypeScript e Vite para o ecossistema **BitX Core (BTXC)** em **Rede Principal de Produção (Mainnet)**, com autocustódia BIP-84, mineração Proof-of-Work SHA-256d e integração direta com a corretora **Global Exchange** (Conglomerado Engecema Fomento e Tecnologia).
 
-## Funcionalidades
+## Funcionalidades Principais
 
-### 1. Painel de Controle BitX Core
-- **Autenticação Administrativa**: Acesso seguro com credenciais locais (`admin`/`bitx123`) e alternância de visibilidade de senha.
-- **Cotação em Tempo Real (Ticker)**: Monitoramento da cotação e variação percentual de 24 horas do BTXC com atualização dinâmica contínua.
-- **Transferência Rápida**: Simulação e registro de transferências de BTXC para endereços regtest (`bxrt1q...`) com geração de ID de transação e lista de histórico de transações.
-- **Gerenciamento de Acessos**: Cadastro, listagem e remoção de usuários com persistência em armazenamento local e proteção de conta mestre de administrador.
-- **Central de Políticas**: Acesso direto às Políticas de Privacidade, Termos de Uso e Política de Cookies.
+### 1. Portal de Operações e Mineração PoW (Mainnet)
+- **Mineração em Tempo Real**: Suporte para mineração de blocos na Mainnet via Nó Validador Solo ou Pool Stratum da Global Exchange (`stratum+tcp://mining.globalexchange.com:3333`).
+- **Fornecimento Máximo**: Teto limite fixado em **1.500.000.000 BTXC** com subsídio Coinbase de 50.00 BTXC por bloco gerado.
+- **Explorador de Blocos & Mempool**: Rastreamento de altura da cadeia, hashes PoW SHA-256d, merkle root e transmissão peer-to-peer de transações.
+- **Configurador `bitx.conf`**: Configuração do nó para produção com nós seed da rede e gateway da corretora (`mainnet=1`, P2P porta `8333`, RPC porta `8332`).
 
-### 2. Carteira BitX Core (Client Wallet)
-- **Autocustódia Estrita**: As chaves privadas nunca saem do navegador e não são transmitidas a servidores.
-- **Geração de Frase BIP-39**: Criação de frase mnemônica de recuperação com 12 palavras em padrão internacional.
-- **Cifragem Local Segura**: Criptografia da frase com PBKDF2 (310.000 iterações com SHA-256) e algoritmo autenticado AES-256-GCM.
-- **Derivação BIP-84**: Derivação hierárquica determinística no caminho `m/84'/1'/0'` para endereços nativos SegWit com prefixo `bxrt1...`.
-- **Visão Geral**: Consulta de saldo regtest e visualização com cópia rápida do endereço atual.
-- **Recebimento e Geração Sequencial**: Cópia do endereço regtest e geração sequencial de novos endereços determinísticos.
-- **Envio de Teste**: Formulário de envio com validação de endereço e quantidade em BTXC.
-- **Histórico e Segurança**: Detalhes técnicos da derivação de chaves e opção de exclusão definitiva da carteira do navegador.
+### 2. Módulo de Integração com a Corretora Global Exchange
+- **Gateway de Liquidez & Custódia**: Conexão em tempo real aos nós da corretora Global Exchange.
+- **Pares de Negociação Ativos**: Cotação e Livro de Ofertas (*Order Book* com Bids e Asks ao vivo) nos pares `BTXC/BRL`, `BTXC/USDT` e `BTXC/BTC`.
+- **Depósitos de Clientes da Corretora**: Hot Wallet institucional (`btxc1qglobal_exchange_hotwallet_liquidity_master01`) com identificação por Tag de Cliente (ex.: `GE-CLIENT-10492`) e confirmação automática em blocos minerados.
+- **Negociação Instantânea**: Execução direta de ordens de compra e venda com liquidação na blockchain.
 
-## Execução
+### 3. Carteira de Autocustódia (Client Wallet)
+- **Segurança Criptográfica Local**: Autocustódia estrita utilizando derivação BIP-84 no caminho `m/84'/0'/0'` (SegWit Nativo com prefixo `btxc1q...`).
+- **Cifragem de Chaves no Navegador**: PBKDF2 (310.000 iterações com SHA-256) e algoritmo autenticado AES-256-GCM.
+- **Envio e Recebimento na Mainnet**: Envio de transações com cálculo automático de taxa e atalho rápido de depósito na Global Exchange.
+
+### 4. Site Institucional
+- Apresentação corporativa da rede BTXC e da parceria estratégica com a corretora Global Exchange e o conglomerado Engecema Fomento e Tecnologia Ltda.
+
+## Execução Local
 
 ```bash
 npm install
@@ -29,3 +32,11 @@ npm run dev
 ```
 
 A aplicação roda em `http://localhost:3000`.
+
+## Build para Produção & GitHub Pages
+
+```bash
+npm run build
+```
+
+Os arquivos estáticos otimizados são gerados na pasta `./dist`.

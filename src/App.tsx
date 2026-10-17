@@ -113,7 +113,7 @@ export function App() {
               color: '#d0dbd1',
             }}
           >
-            <span>Carteira de Teste Regtest BitX Core</span>
+            <span>Carteira de Autocustódia BitX Core (Rede Principal · Mainnet)</span>
             <button
               type="button"
               onClick={() => setCurrentView('portal')}

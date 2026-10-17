@@ -190,7 +190,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <strong>Fornecimento Máximo:</strong> 1.500.000.000 BTXC
                 </div>
                 <div>
-                  <strong>Rede:</strong> Independente (Regtest)
+                  <strong>Rede:</strong> Principal de Produção (Mainnet) &bull; Global Exchange
                 </div>
               </div>
 
@@ -340,7 +340,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="admin-form-group">
                     <input
                       type="text"
-                      placeholder="Endereço de Destino (ex: bxrt1q...)"
+                      placeholder="Endereço de Destino (ex: btxc1q...)"
                       value={txTo}
                       onChange={(e) => setTxTo(e.target.value)}
                       style={{ marginBottom: '8px' }}

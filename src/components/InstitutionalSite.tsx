@@ -30,19 +30,22 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
         >
           <span className="site-logo-coin">BX</span>
           <span>
-            BITX CORE <small> / BTXC</small>
+            BITX CORE <small> / BTXC MAINNET</small>
           </span>
         </button>
 
         <nav className="site-nav" aria-label="Navegação principal">
           <button type="button" onClick={() => scrollToSection('projeto')}>
-            A rede
+            A Rede
+          </button>
+          <button type="button" onClick={() => scrollToSection('exchange')}>
+            Global Exchange
           </button>
           <button type="button" className="site-nav-cta" onClick={onNavigateToWallet}>
-            Acessar carteira
+            Acessar Carteira
           </button>
           <button type="button" className="site-nav-panel" onClick={onNavigateToPanel}>
-            Painel de Configurações
+            Portal de Operações
           </button>
         </nav>
       </header>
@@ -50,15 +53,16 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
       <main>
         <section className="site-shell site-hero" id="inicio">
           <div>
-            <div className="site-eyebrow">Software aberto · Rede BTXC</div>
+            <div className="site-eyebrow">Rede Principal de Produção · Ativo BTXC</div>
             <h1>
-              Uma rede.
+              Uma rede robusta.
               <br />
-              <span>Código aberto.</span>
+              <span>Moeda em produção.</span>
             </h1>
             <p className="site-intro">
-              Conheça a rede BitX Core e acesse a carteira experimental BTXC. A carteira deste site
-              funciona somente em regtest, um ambiente local de testes sem valor monetário.
+              Conheça a rede principal BitX Core (BTXC) em ambiente real de produção. Transacione com
+              autocustódia BIP-84, minere blocos via PoW SHA-256d e opere com liquidez garantida na
+              corretora Global Exchange do mesmo conglomerado.
             </p>
             <div className="site-actions">
               <button
@@ -66,21 +70,21 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
                 className="site-button site-button-orange"
                 onClick={onNavigateToPanel}
               >
-                Painel de Configurações &rarr;
+                Portal de Operações &rarr;
               </button>
               <button
                 type="button"
                 className="site-button"
                 onClick={onNavigateToWallet}
               >
-                Acessar carteira de testes
+                Acessar Carteira Mainnet
               </button>
               <button
                 type="button"
                 className="site-button site-button-secondary"
-                onClick={() => scrollToSection('projeto')}
+                onClick={() => scrollToSection('exchange')}
               >
-                Conhecer a rede
+                Corretora Global Exchange
               </button>
             </div>
           </div>
@@ -93,7 +97,7 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
             <div className="site-coin" aria-hidden="true">
               BX
             </div>
-            <span className="site-visual-label">BitX Core · BTXC</span>
+            <span className="site-visual-label">BitX Core · BTXC Mainnet</span>
           </div>
         </section>
 
@@ -101,29 +105,30 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
           <div className="site-shell site-facts-inner">
             <div className="site-fact">
               <strong>BitX Core</strong>
-              <span>Software da rede BTXC</span>
+              <span>Blockchain PoW SHA-256d Ativa</span>
             </div>
             <div className="site-fact">
               <strong>BTXC</strong>
-              <span>Ativo nativo da rede BitX Core</span>
+              <span>1.500.000.000 Fornecimento Máximo</span>
             </div>
             <div className="site-fact">
-              <strong>Regtest</strong>
-              <span>Ambiente local de testes</span>
+              <strong>Global Exchange</strong>
+              <span>Liquidez & Custódia Institucional</span>
             </div>
           </div>
         </section>
 
-        {/* Highlight Section for Painel de Configurações */}
-        <section className="site-shell site-section" style={{ paddingBottom: '40px' }}>
+        {/* Highlight Section for Global Exchange Broker */}
+        <section className="site-shell site-section" id="exchange" style={{ paddingBottom: '30px' }}>
           <div
             style={{
-              background: '#111827',
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
               borderRadius: '8px',
               padding: '36px',
-              border: '1px solid #1f2937',
+              border: '1px solid #334155',
+              borderLeft: '4px solid #f97316',
               color: '#f3f4f6',
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
             }}
           >
             <div
@@ -145,7 +150,7 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
                     letterSpacing: '0.05em',
                   }}
                 >
-                  PAINEL ADMINISTRATIVO E CONFIGURAÇÃO
+                  INTEGRAÇÃO INSTITUCIONAL DO CONGLOMERADO
                 </span>
                 <h2
                   style={{
@@ -155,80 +160,99 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
                     color: '#fff',
                   }}
                 >
-                  Configuração da Moeda BitX Core
+                  Corretora Global Exchange & BitX Core
                 </h2>
-                <p style={{ margin: 0, color: '#9ca3af', maxWidth: '560px', fontSize: '14px', lineHeight: 1.6 }}>
-                  Acesse os parâmetros da rede regtest, consulte o fornecimento máximo de 1.500.000.000 BTXC, monitore o ticker de cotação em tempo real e gerencie usuários com controle administrativo total.
+                <p style={{ margin: 0, color: '#94a3b8', maxWidth: '620px', fontSize: '14px', lineHeight: 1.6 }}>
+                  A corretora Global Exchange integra a rede BitX Core diretamente aos seus livros de
+                  ofertas nos pares <strong>BTXC/BRL</strong>, <strong>BTXC/USDT</strong> e <strong>BTXC/BTC</strong>.
+                  Clientes contam com depósitos imediatos via blockchain, liquidez contínua, taxas
+                  reduzidas e infraestrutura de alta disponibilidade mantida pela Engecema Fomento e Tecnologia.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onNavigateToPanel}
-                style={{
-                  background: '#f97316',
-                  color: '#fff',
-                  padding: '14px 24px',
-                  borderRadius: '6px',
-                  fontWeight: 'bold',
-                  fontSize: '14px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 6px rgba(249, 115, 22, 0.25)',
-                  transition: 'background 0.15s ease',
-                }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#ea580c')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#f97316')}
-              >
-                Abrir Painel de Configurações &rarr;
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={onNavigateToPanel}
+                  style={{
+                    background: '#f97316',
+                    color: '#fff',
+                    padding: '14px 24px',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 6px rgba(249, 115, 22, 0.25)',
+                  }}
+                >
+                  Acessar Gateway da Global Exchange &rarr;
+                </button>
+                <button
+                  type="button"
+                  onClick={onNavigateToWallet}
+                  style={{
+                    background: '#1e293b',
+                    color: '#cbd5e1',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    fontWeight: '600',
+                    fontSize: '13px',
+                    border: '1px solid #475569',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Abrir Carteira Mainnet
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
+        {/* Steps for Production Mainnet */}
         <section className="site-shell site-section" id="comecar">
           <div className="site-section-heading">
             <div>
-              <div className="site-eyebrow">Carteira de testes</div>
+              <div className="site-eyebrow">Ecossistema em Produção</div>
               <h2>
-                Comece com
+                Como operar na
                 <br />
-                segurança.
+                Rede Principal.
               </h2>
             </div>
             <p>
-              A carteira é experimental e usa uma frase de recuperação protegida no navegador. Use
-              apenas palavras criadas para testes e nunca informe uma frase de uma carteira real.
+              Opere com segurança utilizando a carteira de autocustódia, minere blocos na Mainnet
+              e negocie com os clientes da Global Exchange em tempo real.
             </p>
           </div>
 
           <div className="site-steps">
             <article className="site-step">
-              <span className="site-step-number">01 / CARTEIRA</span>
-              <h3>Crie uma carteira de teste</h3>
+              <span className="site-step-number">01 / AUTOCUSTÓDIA</span>
+              <h3>Carteira SegWit BIP-84</h3>
               <p>
-                Gere ou recupere uma carteira regtest. As chaves ficam no navegador e não são enviadas
-                ao servidor.
+                Crie ou recupere sua carteira com derivação nativa BIP-84 (endereços <code>btxc1...</code>).
+                Cifragem local AES-256-GCM no seu dispositivo.
               </p>
             </article>
 
             <article className="site-step">
-              <span className="site-step-number">02 / REGTEST</span>
-              <h3>Use somente ativos de teste</h3>
+              <span className="site-step-number">02 / GLOBAL EXCHANGE</span>
+              <h3>Liquidez e Negociação</h3>
               <p>
-                Endereços regtest não pertencem à rede principal e os ativos de teste não têm valor
-                monetário.
+                Deposite e retire fundos instantaneamente entre sua carteira BitX Core e sua conta
+                na corretora Global Exchange com confirmações rápidas.
               </p>
             </article>
 
             <article className="site-step">
-              <span className="site-step-number">03 / CONEXÃO</span>
-              <h3>Consulte o estado do nó</h3>
+              <span className="site-step-number">03 / MINERAÇÃO POW</span>
+              <h3>Emissão e Validação PoW</h3>
               <p>
-                Saldo, histórico e envio dependem da conexão com o nó regtest local; não use esta
-                versão para fundos reais.
+                Minere em pool Stratum ou execute seu próprio nó validador independente com o teto
+                máximo de 1.500.000.000 BTXC.
               </p>
             </article>
           </div>
@@ -238,8 +262,8 @@ export const InstitutionalSite: React.FC<InstitutionalSiteProps> = ({
       <footer className="site-footer">
         <div className="site-shell site-footer-inner">
           <div className="site-footer-brand">
-            <strong>BitX Core · BTXC</strong>
-            <span>Carteira experimental para clientes.</span>
+            <strong>BitX Core · BTXC Mainnet</strong>
+            <span>Ecossistema integrado à corretora Global Exchange.</span>
           </div>
 
           <address className="site-footer-company">
