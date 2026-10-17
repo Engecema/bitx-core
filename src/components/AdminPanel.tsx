@@ -135,11 +135,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleDeleteUser = (u: string) => {
     if (u === 'admin') {
-      alert('O usuário administrador principal não pode ser removido.');
       return;
     }
-    if (!confirm(`Deseja remover o usuário "${u}"?`)) return;
-
     const updated = { ...users };
     delete updated[u];
     setUsers(updated);

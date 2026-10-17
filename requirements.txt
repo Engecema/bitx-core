@@ -1,2 +1,0 @@
-# Dependencias Python para o Web Service no Render
-# O servidor server.py utiliza apenas modulos nativos da biblioteca padrao Python

@@ -237,17 +237,13 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
     showToast('Carteira bloqueada com segurança.');
   };
 
+  const [showForgetConfirm, setShowForgetConfirm] = useState(false);
+
   const handleForgetWallet = () => {
-    if (
-      !confirm(
-        'Apagar a carteira cifrada deste navegador? Você precisará da frase de recuperação de 12 palavras para restaurá-la.'
-      )
-    ) {
-      return;
-    }
     removeStoredWallet();
     setStoredRecord(null);
     setUnlockedMnemonic('');
+    setShowForgetConfirm(false);
     setEntryView('welcome');
     showToast('Carteira local removida com sucesso.');
   };
@@ -1076,14 +1072,50 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
                     sua frase de 12 palavras. O suporte não tem acesso às chaves privadas.
                   </div>
 
-                  <button
-                    type="button"
-                    className="wallet-button wallet-button-secondary"
-                    onClick={handleForgetWallet}
-                    style={{ marginTop: '16px' }}
-                  >
-                    Apagar dados da carteira deste dispositivo
-                  </button>
+                  {!showForgetConfirm ? (
+                    <button
+                      type="button"
+                      className="wallet-button wallet-button-secondary"
+                      onClick={() => setShowForgetConfirm(true)}
+                      style={{ marginTop: '16px' }}
+                    >
+                      Apagar dados da carteira deste dispositivo
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        marginTop: '16px',
+                        padding: '14px',
+                        background: '#fef2f2',
+                        border: '1px solid #f87171',
+                        borderRadius: '6px',
+                      }}
+                    >
+                      <strong style={{ color: '#991b1b', fontSize: '13px', display: 'block', marginBottom: '6px' }}>
+                        Confirmar exclusão local?
+                      </strong>
+                      <p style={{ color: '#7f1d1d', fontSize: '12px', margin: '0 0 12px' }}>
+                        Você precisará da sua frase mnemônica de 12 palavras para restaurar o acesso aos seus BTXC.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="wallet-button"
+                          style={{ background: '#dc2626', color: '#fff' }}
+                          onClick={handleForgetWallet}
+                        >
+                          Confirmar e Apagar
+                        </button>
+                        <button
+                          type="button"
+                          className="wallet-button wallet-button-quiet"
+                          onClick={() => setShowForgetConfirm(false)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
               )}
             </div>

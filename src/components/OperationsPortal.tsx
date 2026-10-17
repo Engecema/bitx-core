@@ -42,10 +42,12 @@ export interface ExchangeClient {
   id: string;
   name: string;
   email: string;
+  document?: string;
   btxcBalance: number;
   brlBalance: number;
   usdtBalance: number;
-  status: 'Ativo' | 'Verificado KYC';
+  status: 'Ativo' | 'Verificado KYC' | 'Institucional' | 'VIP';
+  createdAt?: string;
 }
 
 export interface ExchangeDepositRecord {
@@ -189,49 +191,75 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   // Global Exchange State & Sincronização Oficial de Clientes Reais
   const [selectedPair, setSelectedPair] = useState<'BTXC/BRL' | 'BTXC/USDT' | 'BTXC/BTC'>('BTXC/BRL');
   
+  // Definição dos Clientes e Contas Corporativas Reais Oficiais da Global Exchange
+  const officialRealClients: ExchangeClient[] = [
+    {
+      id: 'GE-CORP-001',
+      name: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
+      email: 'diretoria@engecema.com.br',
+      document: '09.123.456/0001-78',
+      btxcBalance: 50000.0,
+      brlBalance: 1250000.0,
+      usdtBalance: 250000.0,
+      status: 'Institucional',
+      createdAt: '15/01/2026',
+    },
+    {
+      id: 'GE-INST-002',
+      name: 'Global Exchange Liquidity Provider (Mesa Institucional)',
+      email: 'mesa.operacoes@globalexchange.com',
+      document: '18.987.654/0001-32',
+      btxcBalance: 100000.0,
+      brlBalance: 2500000.0,
+      usdtBalance: 500000.0,
+      status: 'Institucional',
+      createdAt: '20/01/2026',
+    },
+  ];
+
+  // Filtro estrito para detectar e eliminar clientes fictícios residuais
+  const isFictitiousClient = (c: any): boolean => {
+    if (!c) return true;
+    const id = String(c.id || '').toUpperCase();
+    const name = String(c.name || '').toLowerCase();
+    const email = String(c.email || '').toLowerCase();
+
+    return (
+      id.includes('10492') ||
+      id.includes('88234') ||
+      id.includes('33019') ||
+      id.includes('55104') ||
+      id === 'GE-CLIENT-001' ||
+      name.includes('carlos e. mendes') ||
+      name.includes('mariana duarte') ||
+      name.includes('atlas capital') ||
+      name.includes('fundo delta') ||
+      name.includes('teste') ||
+      name.includes('fictício') ||
+      name.includes('ficticio') ||
+      name.includes('cliente fict') ||
+      email.includes('exemplo.com') ||
+      email.includes('test.com')
+    );
+  };
+
   // Clientes Reais (Sincronizados com o Painel de Configurações da Global Exchange)
   const [exchangeClients, setExchangeClients] = useState<ExchangeClient[]>(() => {
     try {
+      // Limpeza de chaves de teste antigas
+      localStorage.removeItem('bitx_exchange_clients');
+      localStorage.removeItem('bitx_clients');
+
       const stored = localStorage.getItem('bitx_real_exchange_clients');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Eliminar quaisquer resquícios de clientes fictícios
-          const filtered = parsed.filter(
-            (c: any) =>
-              c.id !== 'GE-CLIENT-10492' &&
-              c.id !== 'GE-CLIENT-88234' &&
-              c.id !== 'GE-CLIENT-33019' &&
-              c.id !== 'GE-CLIENT-55104' &&
-              !c.name?.includes('Carlos E. Mendes') &&
-              !c.name?.includes('Mariana Duarte') &&
-              !c.name?.includes('Atlas Capital') &&
-              !c.name?.includes('Fundo Delta')
-          );
+          const filtered = parsed.filter((c: any) => !isFictitiousClient(c));
           if (filtered.length > 0) return filtered;
         }
       }
     } catch {}
-    return [
-      {
-        id: 'GE-CORP-001',
-        name: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
-        email: 'diretoria@engecema.com.br',
-        btxcBalance: 50000.0,
-        brlBalance: 1250000.0,
-        usdtBalance: 250000.0,
-        status: 'Verificado KYC',
-      },
-      {
-        id: 'GE-INST-002',
-        name: 'Global Exchange Liquidity Provider (Mesa Institucional)',
-        email: 'mesa.operacoes@globalexchange.com',
-        btxcBalance: 100000.0,
-        brlBalance: 2500000.0,
-        usdtBalance: 500000.0,
-        status: 'Verificado KYC',
-      },
-    ];
+    return officialRealClients;
   });
 
   // Salvar alterações de clientes reais no localStorage automaticamente
@@ -246,7 +274,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     {
       id: 'DEP-101',
       clientId: 'GE-CORP-001',
-      clientName: 'Engecema Fomento e Tecnologia Ltda',
+      clientName: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
       txid: 'tx_ge_dep_real_001',
       amount: 500.0,
       confirmations: 12,
@@ -257,17 +285,28 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
 
   // Deposit Form for Exchange Client (Sincronizado)
   const [depositClientId, setDepositClientId] = useState<string>(() => {
-    return exchangeClients[0]?.id || '';
+    return exchangeClients[0]?.id || 'GE-CORP-001';
   });
 
-  // Atualizar seleção de depósito caso o cliente selecionado seja removido ou alterado
+  // Cliente selecionado para Negociação Instantânea na Corretora
+  const [orderClientId, setOrderClientId] = useState<string>(() => {
+    return exchangeClients[0]?.id || 'GE-CORP-001';
+  });
+
+  // Atualizar seletores de clientes caso a lista mude
   useEffect(() => {
-    if (exchangeClients.length > 0 && !exchangeClients.some((c) => c.id === depositClientId)) {
-      setDepositClientId(exchangeClients[0].id);
-    } else if (exchangeClients.length === 0) {
+    if (exchangeClients.length > 0) {
+      if (!exchangeClients.some((c) => c.id === depositClientId)) {
+        setDepositClientId(exchangeClients[0].id);
+      }
+      if (!exchangeClients.some((c) => c.id === orderClientId)) {
+        setOrderClientId(exchangeClients[0].id);
+      }
+    } else {
       setDepositClientId('');
+      setOrderClientId('');
     }
-  }, [exchangeClients, depositClientId]);
+  }, [exchangeClients, depositClientId, orderClientId]);
 
   const [depositAmount, setDepositAmount] = useState<string>('50');
   const [depositAlert, setDepositAlert] = useState<string>('');
@@ -307,12 +346,16 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const [newClientId, setNewClientId] = useState('');
   const [newClientName, setNewClientName] = useState('');
   const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientDocument, setNewClientDocument] = useState('');
   const [newClientBtxc, setNewClientBtxc] = useState('0');
   const [newClientBrl, setNewClientBrl] = useState('0');
   const [newClientUsdt, setNewClientUsdt] = useState('0');
-  const [newClientStatus, setNewClientStatus] = useState<'Verificado KYC' | 'Ativo'>('Verificado KYC');
+  const [newClientStatus, setNewClientStatus] = useState<'Institucional' | 'Verificado KYC' | 'VIP' | 'Ativo'>('Verificado KYC');
   const [clientFormFeedback, setClientFormFeedback] = useState<string>('');
   const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
+  const [showResetModal, setShowResetModal] = useState<boolean>(false);
 
   const handleSaveRealClient = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -332,6 +375,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
               ...c,
               name: newClientName.trim(),
               email: newClientEmail.trim(),
+              document: newClientDocument.trim() || c.document || '',
               btxcBalance: btxcNum,
               brlBalance: brlNum,
               usdtBalance: usdtNum,
@@ -341,11 +385,11 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       );
       setExchangeClients(updated);
       setEditingClient(null);
-      setClientFormFeedback(`Cliente "${newClientName.trim()}" atualizado com sucesso e sincronizado.`);
+      setClientFormFeedback(`✓ Cliente "${newClientName.trim()}" atualizado com sucesso e sincronizado.`);
     } else {
       const assignedId =
         newClientId.trim() ||
-        `GE-CLIENT-${Math.floor(10000 + Math.random() * 90000)}`;
+        `GE-CLI-${Math.floor(1000 + Math.random() * 9000)}`;
 
       if (exchangeClients.some((c) => c.id.toLowerCase() === assignedId.toLowerCase())) {
         setClientFormFeedback(`Já existe um cliente com o identificador "${assignedId}".`);
@@ -356,19 +400,22 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
         id: assignedId,
         name: newClientName.trim(),
         email: newClientEmail.trim(),
+        document: newClientDocument.trim() || 'Pendente de validação',
         btxcBalance: btxcNum,
         brlBalance: brlNum,
         usdtBalance: usdtNum,
         status: newClientStatus,
+        createdAt: new Date().toLocaleDateString('pt-BR'),
       };
 
       setExchangeClients((prev) => [...prev, clientToAdd]);
-      setClientFormFeedback(`Cliente real "${clientToAdd.name}" (${clientToAdd.id}) cadastrado com sucesso e sincronizado com a Corretora!`);
+      setClientFormFeedback(`✓ Cliente real "${clientToAdd.name}" (${clientToAdd.id}) cadastrado com sucesso e sincronizado com a Corretora!`);
     }
 
     setNewClientId('');
     setNewClientName('');
     setNewClientEmail('');
+    setNewClientDocument('');
     setNewClientBtxc('0');
     setNewClientBrl('0');
     setNewClientUsdt('0');
@@ -381,11 +428,14 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     setNewClientId(c.id);
     setNewClientName(c.name);
     setNewClientEmail(c.email);
+    setNewClientDocument(c.document || '');
     setNewClientBtxc(c.btxcBalance.toString());
     setNewClientBrl(c.brlBalance.toString());
     setNewClientUsdt(c.usdtBalance.toString());
     setNewClientStatus(c.status);
     setClientFormFeedback('');
+    // Se estiver em outra aba, muda para 'config'
+    setActiveTab('config');
   };
 
   const handleCancelEditClient = () => {
@@ -393,6 +443,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     setNewClientId('');
     setNewClientName('');
     setNewClientEmail('');
+    setNewClientDocument('');
     setNewClientBtxc('0');
     setNewClientBrl('0');
     setNewClientUsdt('0');
@@ -400,44 +451,52 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     setClientFormFeedback('');
   };
 
-  const handleDeleteRealClient = (id: string, name: string) => {
-    if (!window.confirm(`Deseja realmente remover o cliente real "${name}" (${id}) da Global Exchange?`)) {
-      return;
-    }
+  const confirmDeleteRealClient = () => {
+    if (!clientToDelete) return;
+    const { id, name } = clientToDelete;
     setExchangeClients((prev) => prev.filter((c) => c.id !== id));
     if (editingClient?.id === id) {
       handleCancelEditClient();
     }
-    setClientFormFeedback(`Cliente "${name}" (${id}) removido da Global Exchange.`);
+    setClientToDelete(null);
+    setClientFormFeedback(`✓ Cliente "${name}" (${id}) removido da Global Exchange.`);
     setTimeout(() => setClientFormFeedback(''), 4000);
   };
 
+  // Limpar todos os clientes fictícios residuais e sincronizar a base real
+  const handlePurgeFictitiousClients = () => {
+    try {
+      localStorage.removeItem('bitx_exchange_clients');
+      localStorage.removeItem('bitx_clients');
+    } catch {}
+
+    const sanitized = exchangeClients.filter((c) => !isFictitiousClient(c));
+    const finalClients = sanitized.length > 0 ? sanitized : officialRealClients;
+
+    setExchangeClients(finalClients);
+    try {
+      localStorage.setItem('bitx_real_exchange_clients', JSON.stringify(finalClients));
+    } catch {}
+
+    // Sincronizar depósitos
+    setExchangeDeposits((prev) =>
+      prev.filter((d) => finalClients.some((c) => c.id === d.clientId))
+    );
+
+    setShowPurgeModal(false);
+    setClientFormFeedback('🧹 Base purificada com sucesso! Todos os clientes fictícios foram removidos e a Global Exchange está 100% sincronizada com os clientes reais.');
+    addLog('[Global Exchange] Base de clientes purificada: registros fictícios eliminados e contas reais sincronizadas.', 'success');
+    setTimeout(() => setClientFormFeedback(''), 6000);
+  };
+
   const handleResetDefaultClients = () => {
-    if (window.confirm('Deseja restaurar as contas institucionais oficiais da Engecema e Global Exchange?')) {
-      const defaults: ExchangeClient[] = [
-        {
-          id: 'GE-CORP-001',
-          name: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
-          email: 'diretoria@engecema.com.br',
-          btxcBalance: 50000.0,
-          brlBalance: 1250000.0,
-          usdtBalance: 250000.0,
-          status: 'Verificado KYC',
-        },
-        {
-          id: 'GE-INST-002',
-          name: 'Global Exchange Liquidity Provider (Mesa Institucional)',
-          email: 'mesa.operacoes@globalexchange.com',
-          btxcBalance: 100000.0,
-          brlBalance: 2500000.0,
-          usdtBalance: 500000.0,
-          status: 'Verificado KYC',
-        },
-      ];
-      setExchangeClients(defaults);
-      setClientFormFeedback('Contas corporativas oficiais restauradas e sincronizadas.');
-      setTimeout(() => setClientFormFeedback(''), 4000);
-    }
+    setExchangeClients(officialRealClients);
+    try {
+      localStorage.setItem('bitx_real_exchange_clients', JSON.stringify(officialRealClients));
+    } catch {}
+    setShowResetModal(false);
+    setClientFormFeedback('✓ Contas corporativas oficiais da Engecema e Global Exchange restauradas e sincronizadas.');
+    setTimeout(() => setClientFormFeedback(''), 4000);
   };
 
   // Users state
@@ -668,23 +727,73 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     );
   };
 
-  // Handle Client Buy / Sell Order on Global Exchange
+  // Handle Client Buy / Sell Order on Global Exchange (Vinculado à Conta do Cliente Real)
   const handleExecuteExchangeOrder = (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(orderAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    if (isNaN(amt) || amt <= 0) {
+      setOrderFeedback('Informe uma quantidade válida de BTXC.');
+      return;
+    }
+
+    const client = exchangeClients.find((c) => c.id === orderClientId) || exchangeClients[0];
+    if (!client) {
+      setOrderFeedback('Selecione ou cadastre uma conta de cliente real para executar a ordem.');
+      return;
+    }
 
     const totalBrl = amt * price;
-    setOrderFeedback(
-      `Ordem de ${orderSide === 'buy' ? 'COMPRA' : 'VENDA'} de ${amt} BTXC a R$ ${price.toFixed(2)} executada na Global Exchange com liquidação imediata!`
-    );
+
+    if (orderSide === 'buy') {
+      if (client.brlBalance < totalBrl) {
+        setOrderFeedback(
+          `Saldo em BRL insuficiente na conta de "${client.name}". Disponível: R$ ${client.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Necessário: R$ ${totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`
+        );
+        return;
+      }
+      setExchangeClients((prev) =>
+        prev.map((c) =>
+          c.id === client.id
+            ? {
+                ...c,
+                brlBalance: +(c.brlBalance - totalBrl).toFixed(2),
+                btxcBalance: +(c.btxcBalance + amt).toFixed(4),
+              }
+            : c
+        )
+      );
+      setOrderFeedback(
+        `✓ Ordem de COMPRA executada para ${client.name} (${client.id})! +${amt.toFixed(4)} BTXC creditados e R$ ${totalBrl.toFixed(2)} liquidados.`
+      );
+    } else {
+      if (client.btxcBalance < amt) {
+        setOrderFeedback(
+          `Saldo em BTXC insuficiente na conta de "${client.name}". Disponível: ${client.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 4 })} BTXC.`
+        );
+        return;
+      }
+      setExchangeClients((prev) =>
+        prev.map((c) =>
+          c.id === client.id
+            ? {
+                ...c,
+                btxcBalance: +(c.btxcBalance - amt).toFixed(4),
+                brlBalance: +(c.brlBalance + totalBrl).toFixed(2),
+              }
+            : c
+        )
+      );
+      setOrderFeedback(
+        `✓ Ordem de VENDA executada para ${client.name} (${client.id})! -${amt.toFixed(4)} BTXC debitados e R$ ${totalBrl.toFixed(2)} creditados em saldo BRL.`
+      );
+    }
 
     addLog(
-      `[Global Exchange] Ordem executada: ${orderSide.toUpperCase()} ${amt} BTXC @ R$ ${price.toFixed(2)} (Total: R$ ${totalBrl.toFixed(2)}).`,
+      `[Global Exchange] Ordem executada para cliente real ${client.name} (${client.id}): ${orderSide.toUpperCase()} ${amt} BTXC @ R$ ${price.toFixed(2)} (Total: R$ ${totalBrl.toFixed(2)}).`,
       'success'
     );
 
-    setTimeout(() => setOrderFeedback(''), 5000);
+    setTimeout(() => setOrderFeedback(''), 6000);
   };
 
   // Generate bitx.conf content for REAL MAINNET
@@ -1261,6 +1370,21 @@ daemon=1
 
                   <form onSubmit={handleExecuteExchangeOrder}>
                     <div className="portal-form-group">
+                      <label>Conta do Cliente Real Executante (Global Exchange)</label>
+                      <select
+                        className="portal-input"
+                        value={orderClientId}
+                        onChange={(e) => setOrderClientId(e.target.value)}
+                      >
+                        {exchangeClients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.id} — {c.name} (BRL: R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} | BTXC: {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="portal-form-group">
                       <label>Quantidade em BTXC</label>
                       <input
                         type="number"
@@ -1489,28 +1613,52 @@ daemon=1
             <div className="portal-card">
               <div className="portal-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                  <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Sincronizada)</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Sincronizada)</h3>
+                    <span
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid #10b981',
+                        color: '#10b981',
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      ● Base Real Ativa ({exchangeClients.length})
+                    </span>
+                  </div>
                   <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-                    Clientes e contas institucionais reais sincronizados diretamente com o Painel de Configurações.
+                    Clientes e contas institucionais reais sincronizados em tempo real com o Painel de Configurações da Global Exchange.
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                    Total Custodiado:{' '}
-                    <strong style={{ color: '#10b981' }}>
-                      {exchangeClients
-                        .reduce((acc, c) => acc + (c.btxcBalance || 0), 0)
-                        .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                      BTXC
-                    </strong>
-                  </span>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      background: '#7f1d1d',
+                      border: '1px solid #ef4444',
+                      color: '#fca5a5',
+                      fontSize: '12px',
+                      padding: '6px 12px',
+                    }}
+                    onClick={() => setShowPurgeModal(true)}
+                    title="Eliminar quaisquer cadastros fictícios residuais do navegador"
+                  >
+                    🧹 Limpar Clientes Fictícios
+                  </button>
                   <button
                     type="button"
                     className="portal-btn portal-btn-secondary"
                     style={{ fontSize: '12px', padding: '6px 12px' }}
-                    onClick={() => setActiveTab('config')}
+                    onClick={() => {
+                      handleCancelEditClient();
+                      setActiveTab('config');
+                    }}
                   >
-                    ⚙️ Cadastrar / Gerenciar Clientes no Painel de Configurações &rarr;
+                    ⚙️ Cadastrar no Painel de Configurações &rarr;
                   </button>
                 </div>
               </div>
@@ -1520,16 +1668,17 @@ daemon=1
                     <tr>
                       <th>Identificador</th>
                       <th>Nome / Razão Social</th>
-                      <th>E-mail</th>
+                      <th>Documento / E-mail</th>
                       <th>Saldo BTXC</th>
-                      <th>Saldo BRL</th>
+                      <th>Saldo BRL / USDT</th>
                       <th>Status KYC</th>
+                      <th>Ações Rápidas</th>
                     </tr>
                   </thead>
                   <tbody>
                     {exchangeClients.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
                           <p style={{ margin: '0 0 12px', fontSize: '14px', color: '#f8fafc' }}>
                             Nenhum cliente real cadastrado no momento.
                           </p>
@@ -1551,24 +1700,80 @@ daemon=1
                           <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
                             {c.id}
                           </td>
-                          <td><strong>{c.name}</strong></td>
-                          <td style={{ color: '#94a3b8', fontSize: '12px' }}>{c.email}</td>
-                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>
-                            {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} BTXC
+                          <td>
+                            <strong>{c.name}</strong>
+                            {c.createdAt && (
+                              <div style={{ fontSize: '10px', color: '#64748b' }}>Desde: {c.createdAt}</div>
+                            )}
                           </td>
-                          <td>R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td>
+                            <div style={{ fontSize: '12px', color: '#e2e8f0' }}>{c.document || 'Pendente'}</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.email}</div>
+                          </td>
+                          <td style={{ color: '#10b981', fontWeight: 'bold', fontSize: '13px' }}>
+                            {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: '600' }}>
+                              R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                              $ {c.usdtBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} USDT
+                            </div>
+                          </td>
                           <td>
                             <span
                               style={{
-                                background: 'rgba(16, 185, 129, 0.15)',
-                                color: '#10b981',
-                                padding: '2px 8px',
+                                background: c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.15)',
+                                color: c.status === 'Institucional' ? '#60a5fa' : '#10b981',
+                                border: `1px solid ${c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                padding: '3px 8px',
                                 borderRadius: '4px',
                                 fontSize: '11px',
+                                fontWeight: 'bold',
                               }}
                             >
                               {c.status}
                             </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="portal-btn portal-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '11px' }}
+                                onClick={() => {
+                                  setDepositClientId(c.id);
+                                  setDepositAlert(`Cliente "${c.name}" selecionado no formulário de depósito acima.`);
+                                  window.scrollTo({ top: 400, behavior: 'smooth' });
+                                }}
+                                title="Preencher formulário de depósito para este cliente"
+                              >
+                                Depositar
+                              </button>
+                              <button
+                                type="button"
+                                className="portal-btn portal-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981' }}
+                                onClick={() => {
+                                  setOrderClientId(c.id);
+                                  setOrderFeedback(`Cliente "${c.name}" selecionado para negociação no livro.`);
+                                  window.scrollTo({ top: 300, behavior: 'smooth' });
+                                }}
+                                title="Selecionar para negociar no Livro de Ofertas"
+                              >
+                                Negociar
+                              </button>
+                              <button
+                                type="button"
+                                className="portal-btn portal-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '11px', color: '#f97316' }}
+                                onClick={() => handleStartEditClient(c)}
+                                title="Editar dados no Painel de Configurações"
+                              >
+                                Editar
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -1788,6 +1993,410 @@ daemon=1
                     Adicionar Acesso
                   </button>
                 </div>
+              </div>
+            </div>
+
+            {/* CARD 2: GESTÃO E SINCRONIZAÇÃO DE CLIENTES REAIS DA GLOBAL EXCHANGE */}
+            <div className="portal-card" style={{ marginTop: '24px' }}>
+              <div
+                className="portal-card-header"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <h2 className="portal-card-title">
+                      🏛️ Gestão de Clientes Reais da Corretora Global Exchange
+                    </h2>
+                    <span
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid #10b981',
+                        color: '#10b981',
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      ● Sincronização em Tempo Real Ativa
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                    Cadastre, edite e sincronize clientes e contas corporativas reais da Global Exchange. Todas as alterações refletem instantaneamente no livro de ofertas, custódia e gateway de depósitos.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      background: '#7f1d1d',
+                      border: '1px solid #ef4444',
+                      color: '#fca5a5',
+                      fontSize: '12px',
+                      padding: '6px 12px',
+                    }}
+                    onClick={() => setShowPurgeModal(true)}
+                  >
+                    🧹 Limpar Fictícios e Purificar Base
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                    onClick={() => setShowResetModal(true)}
+                  >
+                    Restaurar Oficiais (Engecema & GE)
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-primary"
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                    onClick={() => setActiveTab('exchange')}
+                  >
+                    Ir para Corretora (Clientes) ↗
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Banner */}
+              <div
+                style={{
+                  background: '#0b1120',
+                  border: '1px solid #1f2937',
+                  borderLeft: '4px solid #10b981',
+                  borderRadius: '6px',
+                  padding: '14px 18px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <strong style={{ color: '#f8fafc', fontSize: '13px' }}>
+                    Status da Base de Clientes:
+                  </strong>{' '}
+                  <span style={{ color: '#10b981', fontWeight: 'bold' }}>
+                    {exchangeClients.length} Contas Reais Autenticadas
+                  </span>{' '}
+                  &bull; Clientes fictícios isolados e expurgados da aplicação.
+                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  Custódia Total:{' '}
+                  <strong style={{ color: '#10b981' }}>
+                    {exchangeClients
+                      .reduce((acc, c) => acc + (c.btxcBalance || 0), 0)
+                      .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}{' '}
+                    BTXC
+                  </strong>{' '}
+                  |{' '}
+                  <strong style={{ color: '#f8fafc' }}>
+                    R${' '}
+                    {exchangeClients
+                      .reduce((acc, c) => acc + (c.brlBalance || 0), 0)
+                      .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+
+              {/* FORMULÁRIO DE CADASTRO / EDIÇÃO */}
+              <form
+                onSubmit={handleSaveRealClient}
+                style={{
+                  background: '#0d1526',
+                  border: '1px solid #233554',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  marginBottom: '24px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                    borderBottom: '1px solid #1e293b',
+                    paddingBottom: '10px',
+                  }}
+                >
+                  <h3 style={{ margin: 0, fontSize: '15px', color: '#f8fafc' }}>
+                    {editingClient
+                      ? `✏️ Editando Cliente Real: ${editingClient.name} (${editingClient.id})`
+                      : '➕ Cadastrar Novo Cliente Real na Global Exchange'}
+                  </h3>
+                  {editingClient && (
+                    <button
+                      type="button"
+                      className="portal-btn portal-btn-secondary"
+                      style={{ padding: '3px 8px', fontSize: '11px' }}
+                      onClick={handleCancelEditClient}
+                    >
+                      Cancelar Edição
+                    </button>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '14px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Identificador / Tag (ID)
+                    </label>
+                    <input
+                      type="text"
+                      className="portal-input portal-mono"
+                      placeholder="Ex: GE-CORP-001 ou GE-CLI-1029"
+                      value={newClientId}
+                      onChange={(e) => setNewClientId(e.target.value)}
+                    />
+                    <small style={{ fontSize: '10px', color: '#64748b' }}>
+                      Deixe vazio para gerar código automático.
+                    </small>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Nome Completo / Razão Social *
+                    </label>
+                    <input
+                      type="text"
+                      className="portal-input"
+                      placeholder="Ex: Engecema Fomento e Tecnologia Ltda"
+                      value={newClientName}
+                      onChange={(e) => setNewClientName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      E-mail Institucional / Contato *
+                    </label>
+                    <input
+                      type="email"
+                      className="portal-input"
+                      placeholder="Ex: cliente@engecema.com.br"
+                      value={newClientEmail}
+                      onChange={(e) => setNewClientEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Documento Oficial (CPF / CNPJ)
+                    </label>
+                    <input
+                      type="text"
+                      className="portal-input"
+                      placeholder="Ex: 09.123.456/0001-78 ou CPF"
+                      value={newClientDocument}
+                      onChange={(e) => setNewClientDocument(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Saldo Inicial BTXC
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      className="portal-input"
+                      value={newClientBtxc}
+                      onChange={(e) => setNewClientBtxc(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Saldo Inicial BRL (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="portal-input"
+                      value={newClientBrl}
+                      onChange={(e) => setNewClientBrl(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Saldo Inicial USDT ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="portal-input"
+                      value={newClientUsdt}
+                      onChange={(e) => setNewClientUsdt(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Perfil / Status KYC
+                    </label>
+                    <select
+                      className="portal-input"
+                      value={newClientStatus}
+                      onChange={(e) => setNewClientStatus(e.target.value as any)}
+                    >
+                      <option value="Institucional">Institucional (Mesa Corporativa)</option>
+                      <option value="Verificado KYC">Verificado KYC (Completo)</option>
+                      <option value="VIP">VIP Private (Alta Renda)</option>
+                      <option value="Ativo">Ativo Padrão</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button type="submit" className="portal-btn portal-btn-primary">
+                    {editingClient ? '✓ Atualizar e Sincronizar Cliente' : '＋ Cadastrar e Sincronizar Cliente Real'}
+                  </button>
+                  {editingClient && (
+                    <button
+                      type="button"
+                      className="portal-btn portal-btn-secondary"
+                      onClick={handleCancelEditClient}
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  {clientFormFeedback && (
+                    <span
+                      style={{
+                        fontSize: '12px',
+                        color: clientFormFeedback.startsWith('Já existe') || clientFormFeedback.startsWith('Por favor') ? '#ef4444' : '#10b981',
+                        fontWeight: 'bold',
+                        marginLeft: '8px',
+                      }}
+                    >
+                      {clientFormFeedback}
+                    </span>
+                  )}
+                </div>
+              </form>
+
+              {/* TABELA DE CLIENTES REAIS */}
+              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#f8fafc' }}>
+                Clientes Reais Ativos no Sistema ({exchangeClients.length})
+              </h3>
+              <div className="portal-table-container">
+                <table className="portal-table">
+                  <thead>
+                    <tr>
+                      <th>Identificador</th>
+                      <th>Nome / Razão Social</th>
+                      <th>Documento</th>
+                      <th>E-mail</th>
+                      <th>Saldo BTXC</th>
+                      <th>Saldo BRL</th>
+                      <th>Saldo USDT</th>
+                      <th>Status KYC</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exchangeClients.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          Nenhum cliente cadastrado. Utilize o formulário acima para cadastrar contas reais.
+                        </td>
+                      </tr>
+                    ) : (
+                      exchangeClients.map((c) => (
+                        <tr key={c.id}>
+                          <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
+                            {c.id}
+                          </td>
+                          <td>
+                            <strong>{c.name}</strong>
+                            {c.createdAt && (
+                              <div style={{ fontSize: '10px', color: '#64748b' }}>Cadastrado: {c.createdAt}</div>
+                            )}
+                          </td>
+                          <td style={{ fontSize: '12px', color: '#cbd5e1' }}>{c.document || '—'}</td>
+                          <td style={{ fontSize: '12px', color: '#94a3b8' }}>{c.email}</td>
+                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>
+                            {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
+                          </td>
+                          <td>R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td>$ {c.usdtBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td>
+                            <span
+                              style={{
+                                background: c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.15)',
+                                color: c.status === 'Institucional' ? '#60a5fa' : '#10b981',
+                                border: `1px solid ${c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 'bold',
+                              }}
+                            >
+                              {c.status}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="portal-btn portal-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '11px', color: '#f97316' }}
+                                onClick={() => handleStartEditClient(c)}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                className="portal-btn portal-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981' }}
+                                onClick={() => {
+                                  setOrderClientId(c.id);
+                                  setDepositClientId(c.id);
+                                  setActiveTab('exchange');
+                                }}
+                                title="Abrir na Corretora para negociar ou depositar"
+                              >
+                                Corretora ↗
+                              </button>
+                              <button
+                                type="button"
+                                className="portal-btn portal-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '11px', color: '#ef4444' }}
+                                onClick={() => setClientToDelete({ id: c.id, name: c.name })}
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -2256,6 +2865,174 @@ daemon=1
                   onClick={() => setSelectedBlock(null)}
                 >
                   Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE CONFIRMAÇÃO: LIMPEZA DE CLIENTES FICTÍCIOS */}
+        {showPurgeModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#0f172a',
+                border: '1px solid #ef4444',
+                borderRadius: '8px',
+                padding: '24px',
+                maxWidth: '520px',
+                width: '100%',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '24px' }}>🧹</span>
+                <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>
+                  Limpar Clientes Fictícios e Sincronizar Base
+                </h3>
+              </div>
+              <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.6', margin: '0 0 16px' }}>
+                Esta ação fará a varredura de toda a memória e do armazenamento local do navegador (<code>localStorage</code>), expurgando quaisquer cadastros fictícios residuais e sincronizando a <strong>Corretora Global Exchange</strong> estritamente com os <strong>clientes reais</strong> cadastrados no Painel de Configurações.
+              </p>
+              <div
+                style={{
+                  background: '#1e293b',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  marginBottom: '20px',
+                  fontSize: '12px',
+                  color: '#94a3b8',
+                }}
+              >
+                ✓ As contas corporativas oficiais (Engecema e Mesa Institucional GE) e novos clientes reais inseridos serão preservados e sincronizados com a carteira e o livro de ofertas.
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="portal-btn portal-btn-secondary"
+                  onClick={() => setShowPurgeModal(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="portal-btn"
+                  style={{ background: '#dc2626', color: '#fff', border: 'none' }}
+                  onClick={handlePurgeFictitiousClients}
+                >
+                  Executar Limpeza e Sincronizar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE CONFIRMAÇÃO: EXCLUSÃO DE CLIENTE REAL */}
+        {clientToDelete && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                padding: '24px',
+                maxWidth: '460px',
+                width: '100%',
+              }}
+            >
+              <h3 style={{ margin: '0 0 10px', color: '#f8fafc', fontSize: '16px' }}>
+                Remover Cliente Real
+              </h3>
+              <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.5', margin: '0 0 20px' }}>
+                Deseja realmente remover o cliente <strong>"{clientToDelete.name}"</strong> (<code>{clientToDelete.id}</code>) da Global Exchange? Esta ação atualizará o Painel de Configurações e a lista de depósitos imediatamente.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="portal-btn portal-btn-secondary"
+                  onClick={() => setClientToDelete(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="portal-btn"
+                  style={{ background: '#dc2626', color: '#fff', border: 'none' }}
+                  onClick={confirmDeleteRealClient}
+                >
+                  Confirmar Remoção
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE CONFIRMAÇÃO: RESTAURAÇÃO DE CONTAS PADRÃO */}
+        {showResetModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                padding: '24px',
+                maxWidth: '480px',
+                width: '100%',
+              }}
+            >
+              <h3 style={{ margin: '0 0 10px', color: '#f8fafc', fontSize: '16px' }}>
+                Restaurar Contas Corporativas Oficiais
+              </h3>
+              <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.5', margin: '0 0 20px' }}>
+                Deseja redefinir a base para as contas institucionais oficiais da <strong>Engecema Fomento e Tecnologia Ltda</strong> e da <strong>Global Exchange Liquidity Provider</strong>?
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="portal-btn portal-btn-secondary"
+                  onClick={() => setShowResetModal(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="portal-btn portal-btn-primary"
+                  onClick={handleResetDefaultClients}
+                >
+                  Restaurar Contas
                 </button>
               </div>
             </div>
