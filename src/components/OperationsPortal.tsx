@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/portal.css';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { supabase } from '../utils/supabase';
 
 interface OperationsPortalProps {
   onOpenPolicy: (policy: 'privacidade' | 'termos' | 'cookies') => void;
@@ -634,6 +635,10 @@ daemon=1
 
           <div className="portal-metric-pill" style={{ borderColor: '#3b82f6' }}>
             Global Exchange: <strong style={{ color: '#60a5fa' }}>● Online v3.4</strong>
+          </div>
+
+          <div className="portal-metric-pill" style={{ borderColor: '#10b981' }}>
+            Supabase Cloud: <strong style={{ color: '#10b981' }}>● Conectado (odbbtgkxgiqlfhcepwuj)</strong>
           </div>
         </div>
       </header>
