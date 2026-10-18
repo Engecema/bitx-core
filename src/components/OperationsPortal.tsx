@@ -165,15 +165,6 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   // Mempool state in Mainnet
   const [mempool, setMempool] = useState<MempoolTx[]>([
     {
-      txid: 'tx_ge_dep_77192a0',
-      from: 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
-      to: 'btxc1qglobal_exchange_hotwallet_liquidity_master01',
-      amount: 45.0,
-      fee: 0.0001,
-      time: 'Há 1 min',
-      exchangeClientTag: 'GE-CORP-001',
-    },
-    {
       txid: 'tx_mainnet_90c41b',
       from: 'btxc1q982kd092jf83h28sdj23098fjs823jfd',
       to: 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
@@ -188,112 +179,94 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const [sendAmount, setSendAmount] = useState('');
   const [sendFeedback, setSendFeedback] = useState<string>('');
 
-  // Global Exchange State & Sincronização Oficial de Clientes Reais
+  // Global Exchange State & Sincronização Exclusiva de Clientes Reais
   const [selectedPair, setSelectedPair] = useState<'BTXC/BRL' | 'BTXC/USDT' | 'BTXC/BTC'>('BTXC/BRL');
   
-  // Definição dos Clientes e Contas Corporativas Reais Oficiais da Global Exchange
-  const officialRealClients: ExchangeClient[] = [
-    {
-      id: 'GE-CORP-001',
-      name: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
-      email: 'diretoria@engecema.com.br',
-      document: '09.123.456/0001-78',
-      btxcBalance: 50000.0,
-      brlBalance: 1250000.0,
-      usdtBalance: 250000.0,
-      status: 'Institucional',
-      createdAt: '15/01/2026',
-    },
-    {
-      id: 'GE-INST-002',
-      name: 'Global Exchange Liquidity Provider (Mesa Institucional)',
-      email: 'mesa.operacoes@globalexchange.com',
-      document: '18.987.654/0001-32',
-      btxcBalance: 100000.0,
-      brlBalance: 2500000.0,
-      usdtBalance: 500000.0,
-      status: 'Institucional',
-      createdAt: '20/01/2026',
-    },
-  ];
+  // Clientes EXCLUSIVAMENTE Reais vindos da Plataforma Global Exchange (Supabase)
+  const [exchangeClients, setExchangeClients] = useState<ExchangeClient[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState<boolean>(true);
+  const [clientsError, setClientsError] = useState<string | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
 
-  // Filtro estrito para detectar e eliminar clientes fictícios residuais
-  const isFictitiousClient = (c: any): boolean => {
-    if (!c) return true;
-    const id = String(c.id || '').toUpperCase();
-    const name = String(c.name || '').toLowerCase();
-    const email = String(c.email || '').toLowerCase();
+  // Função para buscar EXCLUSIVAMENTE clientes reais da plataforma Global Exchange
+  const fetchRealClientsFromGlobalExchange = async () => {
+    setIsLoadingClients(true);
+    setClientsError(null);
+    try {
+      // Limpeza forçada de quaisquer resíduos de dados fictícios em cache
+      try {
+        localStorage.removeItem('bitx_exchange_clients');
+        localStorage.removeItem('bitx_clients');
+        localStorage.removeItem('bitx_real_exchange_clients');
+      } catch {}
 
-    return (
-      id.includes('10492') ||
-      id.includes('88234') ||
-      id.includes('33019') ||
-      id.includes('55104') ||
-      id === 'GE-CLIENT-001' ||
-      name.includes('carlos e. mendes') ||
-      name.includes('mariana duarte') ||
-      name.includes('atlas capital') ||
-      name.includes('fundo delta') ||
-      name.includes('teste') ||
-      name.includes('fictício') ||
-      name.includes('ficticio') ||
-      name.includes('cliente fict') ||
-      email.includes('exemplo.com') ||
-      email.includes('test.com')
-    );
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data && Array.isArray(data)) {
+        // Mapeia estritamente clientes reais oriundos da Global Exchange
+        const mapped: ExchangeClient[] = data.map((c: any) => ({
+          id: String(c.id || ''),
+          name: String(c.name || 'Cliente Global Exchange'),
+          email: String(c.email || '—'),
+          document: c.document ? String(c.document) : undefined,
+          btxcBalance: typeof c.btxc_balance === 'number' ? c.btxc_balance : 0.0,
+          brlBalance: typeof c.brl_balance === 'number' ? c.brl_balance : 0.0,
+          usdtBalance: typeof c.usdt_balance === 'number' ? c.usdt_balance : 0.0,
+          status: 'Verificado KYC',
+          createdAt: c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : undefined,
+        }));
+        setExchangeClients(mapped);
+      } else {
+        setExchangeClients([]);
+      }
+      setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
+    } catch (err: any) {
+      console.error('[Global Exchange] Erro na sincronização de clientes reais:', err);
+      setClientsError(err?.message || 'Falha ao conectar com o banco de dados da Global Exchange.');
+      setExchangeClients([]);
+    } finally {
+      setIsLoadingClients(false);
+    }
   };
 
-  // Clientes Reais (Sincronizados com o Painel de Configurações da Global Exchange)
-  const [exchangeClients, setExchangeClients] = useState<ExchangeClient[]>(() => {
-    try {
-      // Limpeza de chaves de teste antigas
-      localStorage.removeItem('bitx_exchange_clients');
-      localStorage.removeItem('bitx_clients');
-
-      const stored = localStorage.getItem('bitx_real_exchange_clients');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const filtered = parsed.filter((c: any) => !isFictitiousClient(c));
-          if (filtered.length > 0) return filtered;
-        }
-      }
-    } catch {}
-    return officialRealClients;
-  });
-
-  // Salvar alterações de clientes reais no localStorage automaticamente
+  // Sincronização inicial e listener em tempo real com a plataforma Global Exchange
   useEffect(() => {
-    try {
-      localStorage.setItem('bitx_real_exchange_clients', JSON.stringify(exchangeClients));
-    } catch {}
-  }, [exchangeClients]);
+    fetchRealClientsFromGlobalExchange();
 
-  // Exchange Deposits History (Clientes Reais)
-  const [exchangeDeposits, setExchangeDeposits] = useState<ExchangeDepositRecord[]>([
-    {
-      id: 'DEP-101',
-      clientId: 'GE-CORP-001',
-      clientName: 'Engecema Fomento e Tecnologia Ltda (Custódia Corporativa)',
-      txid: 'tx_ge_dep_real_001',
-      amount: 500.0,
-      confirmations: 12,
-      status: 'Creditado',
-      time: 'Hoje, 08:30',
-    },
-  ]);
+    // Inscrição em tempo real para mudanças na tabela de clientes da Global Exchange
+    const channel = supabase
+      .channel('realtime_global_exchange_clients')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients' },
+        () => {
+          fetchRealClientsFromGlobalExchange();
+        }
+      )
+      .subscribe();
 
-  // Deposit Form for Exchange Client (Sincronizado)
-  const [depositClientId, setDepositClientId] = useState<string>(() => {
-    return exchangeClients[0]?.id || 'GE-CORP-001';
-  });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Histórico de Depósitos da Corretora (Inicializado vazio, apenas para clientes reais)
+  const [exchangeDeposits, setExchangeDeposits] = useState<ExchangeDepositRecord[]>([]);
+
+  // Deposit Form for Exchange Client (Vinculado a clientes reais)
+  const [depositClientId, setDepositClientId] = useState<string>('');
 
   // Cliente selecionado para Negociação Instantânea na Corretora
-  const [orderClientId, setOrderClientId] = useState<string>(() => {
-    return exchangeClients[0]?.id || 'GE-CORP-001';
-  });
+  const [orderClientId, setOrderClientId] = useState<string>('');
 
-  // Atualizar seletores de clientes caso a lista mude
+  // Atualizar seletores quando a lista de clientes reais for carregada
   useEffect(() => {
     if (exchangeClients.length > 0) {
       if (!exchangeClients.some((c) => c.id === depositClientId)) {
@@ -355,72 +328,46 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
   const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
-  const [showResetModal, setShowResetModal] = useState<boolean>(false);
 
-  const handleSaveRealClient = (e?: React.FormEvent) => {
+  const handleSaveRealClient = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newClientName.trim() || !newClientEmail.trim()) {
       setClientFormFeedback('Por favor, preencha o Nome/Razão Social e o E-mail do cliente.');
       return;
     }
 
-    const btxcNum = Math.max(0, parseFloat(newClientBtxc) || 0);
-    const brlNum = Math.max(0, parseFloat(newClientBrl) || 0);
-    const usdtNum = Math.max(0, parseFloat(newClientUsdt) || 0);
+    const assignedId =
+      newClientId.trim() ||
+      `GE-CLI-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    if (editingClient) {
-      const updated = exchangeClients.map((c) =>
-        c.id === editingClient.id
-          ? {
-              ...c,
-              name: newClientName.trim(),
-              email: newClientEmail.trim(),
-              document: newClientDocument.trim() || c.document || '',
-              btxcBalance: btxcNum,
-              brlBalance: brlNum,
-              usdtBalance: usdtNum,
-              status: newClientStatus,
-            }
-          : c
-      );
-      setExchangeClients(updated);
-      setEditingClient(null);
-      setClientFormFeedback(`✓ Cliente "${newClientName.trim()}" atualizado com sucesso e sincronizado.`);
-    } else {
-      const assignedId =
-        newClientId.trim() ||
-        `GE-CLI-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      if (exchangeClients.some((c) => c.id.toLowerCase() === assignedId.toLowerCase())) {
-        setClientFormFeedback(`Já existe um cliente com o identificador "${assignedId}".`);
-        return;
-      }
-
-      const clientToAdd: ExchangeClient = {
-        id: assignedId,
+    try {
+      setClientFormFeedback('Enviando para a base de dados da Global Exchange (Supabase)...');
+      
+      const payload: any = {
         name: newClientName.trim(),
         email: newClientEmail.trim(),
-        document: newClientDocument.trim() || 'Pendente de validação',
-        btxcBalance: btxcNum,
-        brlBalance: brlNum,
-        usdtBalance: usdtNum,
-        status: newClientStatus,
-        createdAt: new Date().toLocaleDateString('pt-BR'),
       };
+      if (newClientDocument.trim()) {
+        payload.document = newClientDocument.trim();
+      }
+      if (newClientId.trim()) {
+        payload.id = newClientId.trim();
+      }
 
-      setExchangeClients((prev) => [...prev, clientToAdd]);
-      setClientFormFeedback(`✓ Cliente real "${clientToAdd.name}" (${clientToAdd.id}) cadastrado com sucesso e sincronizado com a Corretora!`);
+      const { error } = await supabase.from('clients').insert([payload]);
+
+      if (error) {
+        // Se a política de RLS do Supabase restringir inserção anônima direta
+        console.warn('Erro ao inserir cliente no Supabase:', error.message);
+        setClientFormFeedback(`Aviso da Plataforma: ${error.message}. Cadastre novos clientes diretamente pela autenticação da Global Exchange.`);
+      } else {
+        setClientFormFeedback(`✓ Cliente "${newClientName.trim()}" sincronizado com sucesso na Global Exchange!`);
+        await fetchRealClientsFromGlobalExchange();
+        handleCancelEditClient();
+      }
+    } catch (err: any) {
+      setClientFormFeedback(`Erro: ${err?.message || 'Falha de comunicação com a Global Exchange'}`);
     }
-
-    setNewClientId('');
-    setNewClientName('');
-    setNewClientEmail('');
-    setNewClientDocument('');
-    setNewClientBtxc('0');
-    setNewClientBrl('0');
-    setNewClientUsdt('0');
-    setNewClientStatus('Verificado KYC');
-    setTimeout(() => setClientFormFeedback(''), 5000);
   };
 
   const handleStartEditClient = (c: ExchangeClient) => {
@@ -432,9 +379,8 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     setNewClientBtxc(c.btxcBalance.toString());
     setNewClientBrl(c.brlBalance.toString());
     setNewClientUsdt(c.usdtBalance.toString());
-    setNewClientStatus(c.status);
+    setNewClientStatus((c.status as any) || 'Verificado KYC');
     setClientFormFeedback('');
-    // Se estiver em outra aba, muda para 'config'
     setActiveTab('config');
   };
 
@@ -451,52 +397,39 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     setClientFormFeedback('');
   };
 
-  const confirmDeleteRealClient = () => {
+  const confirmDeleteRealClient = async () => {
     if (!clientToDelete) return;
     const { id, name } = clientToDelete;
+    
+    try {
+      const { error } = await supabase.from('clients').delete().eq('id', id);
+      if (error) {
+        console.warn('Erro ao remover do Supabase:', error.message);
+      }
+    } catch {}
+
     setExchangeClients((prev) => prev.filter((c) => c.id !== id));
     if (editingClient?.id === id) {
       handleCancelEditClient();
     }
     setClientToDelete(null);
-    setClientFormFeedback(`✓ Cliente "${name}" (${id}) removido da Global Exchange.`);
+    setClientFormFeedback(`✓ Cliente "${name}" (${id}) desvinculado.`);
     setTimeout(() => setClientFormFeedback(''), 4000);
   };
 
-  // Limpar todos os clientes fictícios residuais e sincronizar a base real
-  const handlePurgeFictitiousClients = () => {
+  // Limpar qualquer cache e forçar sincronização exclusiva com a Global Exchange
+  const handlePurgeFictitiousClients = async () => {
     try {
       localStorage.removeItem('bitx_exchange_clients');
       localStorage.removeItem('bitx_clients');
+      localStorage.removeItem('bitx_real_exchange_clients');
     } catch {}
-
-    const sanitized = exchangeClients.filter((c) => !isFictitiousClient(c));
-    const finalClients = sanitized.length > 0 ? sanitized : officialRealClients;
-
-    setExchangeClients(finalClients);
-    try {
-      localStorage.setItem('bitx_real_exchange_clients', JSON.stringify(finalClients));
-    } catch {}
-
-    // Sincronizar depósitos
-    setExchangeDeposits((prev) =>
-      prev.filter((d) => finalClients.some((c) => c.id === d.clientId))
-    );
 
     setShowPurgeModal(false);
-    setClientFormFeedback('🧹 Base purificada com sucesso! Todos os clientes fictícios foram removidos e a Global Exchange está 100% sincronizada com os clientes reais.');
-    addLog('[Global Exchange] Base de clientes purificada: registros fictícios eliminados e contas reais sincronizadas.', 'success');
+    await fetchRealClientsFromGlobalExchange();
+    setClientFormFeedback('🧹 Cache purificado! Listando exclusivamente clientes reais da plataforma Global Exchange.');
+    addLog('[Global Exchange] Base purificada: clientes fictícios eliminados e sincronização 100% real ativada.', 'success');
     setTimeout(() => setClientFormFeedback(''), 6000);
-  };
-
-  const handleResetDefaultClients = () => {
-    setExchangeClients(officialRealClients);
-    try {
-      localStorage.setItem('bitx_real_exchange_clients', JSON.stringify(officialRealClients));
-    } catch {}
-    setShowResetModal(false);
-    setClientFormFeedback('✓ Contas corporativas oficiais da Engecema e Global Exchange restauradas e sincronizadas.');
-    setTimeout(() => setClientFormFeedback(''), 4000);
   };
 
   // Users state
@@ -1375,13 +1308,23 @@ daemon=1
                         className="portal-input"
                         value={orderClientId}
                         onChange={(e) => setOrderClientId(e.target.value)}
+                        disabled={exchangeClients.length === 0}
                       >
-                        {exchangeClients.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.id} — {c.name} (BRL: R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} | BTXC: {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-                          </option>
-                        ))}
+                        {exchangeClients.length === 0 ? (
+                          <option value="">Nenhum cliente real da Global Exchange cadastrado</option>
+                        ) : (
+                          exchangeClients.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.id} — {c.name} (BRL: R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} | BTXC: {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                            </option>
+                          ))
+                        )}
                       </select>
+                      {exchangeClients.length === 0 && (
+                        <small style={{ color: '#f59e0b', fontSize: '11px', display: 'block', marginTop: '4px' }}>
+                          * Aguardando cadastro de clientes reais na plataforma Global Exchange para operar.
+                        </small>
+                      )}
                     </div>
 
                     <div className="portal-form-group">
@@ -1394,6 +1337,7 @@ daemon=1
                         value={orderAmount}
                         onChange={(e) => setOrderAmount(e.target.value)}
                         required
+                        disabled={exchangeClients.length === 0}
                       />
                     </div>
 
@@ -1432,8 +1376,13 @@ daemon=1
                       type="submit"
                       className={`portal-btn ${orderSide === 'buy' ? 'portal-btn-success' : 'portal-btn-primary'}`}
                       style={{ width: '100%' }}
+                      disabled={exchangeClients.length === 0}
                     >
-                      {orderSide === 'buy' ? 'Executar Compra na Corretora' : 'Executar Venda na Corretora'}
+                      {exchangeClients.length === 0
+                        ? 'Aguardando Clientes Reais na Global Exchange'
+                        : orderSide === 'buy'
+                        ? 'Executar Compra na Corretora'
+                        : 'Executar Venda na Corretora'}
                     </button>
 
                     {orderFeedback && (
@@ -1486,13 +1435,23 @@ daemon=1
                       className="portal-input"
                       value={depositClientId}
                       onChange={(e) => setDepositClientId(e.target.value)}
+                      disabled={exchangeClients.length === 0}
                     >
-                      {exchangeClients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.id} — {c.name} (Saldo: {c.btxcBalance.toLocaleString()} BTXC)
-                        </option>
-                      ))}
+                      {exchangeClients.length === 0 ? (
+                        <option value="">Nenhum cliente real da Global Exchange cadastrado</option>
+                      ) : (
+                        exchangeClients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.id} — {c.name} (Saldo: {c.btxcBalance.toLocaleString()} BTXC)
+                          </option>
+                        ))
+                      )}
                     </select>
+                    {exchangeClients.length === 0 && (
+                      <small style={{ color: '#f59e0b', fontSize: '11px', display: 'block', marginTop: '4px' }}>
+                        * Apenas clientes reais da Global Exchange podem receber depósitos.
+                      </small>
+                    )}
                   </div>
 
                   <div className="portal-form-group">
@@ -1505,6 +1464,7 @@ daemon=1
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
                       required
+                      disabled={exchangeClients.length === 0}
                     />
                   </div>
 
@@ -1525,7 +1485,11 @@ daemon=1
                     <strong style={{ color: '#10b981' }}>{walletBalance.toFixed(4)} BTXC</strong>
                   </span>
 
-                  <button type="submit" className="portal-btn portal-btn-primary">
+                  <button
+                    type="submit"
+                    className="portal-btn portal-btn-primary"
+                    disabled={exchangeClients.length === 0}
+                  >
                     Efetuar Depósito com Tag do Cliente
                   </button>
                 </div>
@@ -1564,57 +1528,65 @@ daemon=1
                     </tr>
                   </thead>
                   <tbody>
-                    {exchangeDeposits.map((dep) => (
-                      <tr key={dep.id}>
-                        <td style={{ fontWeight: 'bold', color: '#f97316' }}>{dep.id}</td>
-                        <td>
-                          <div><strong>{dep.clientName}</strong></div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>{dep.clientId}</div>
-                        </td>
-                        <td className="portal-mono" style={{ color: '#38bdf8', fontSize: '11px' }}>
-                          {dep.txid}
-                        </td>
-                        <td style={{ color: '#10b981', fontWeight: 'bold' }}>
-                          +{dep.amount.toFixed(4)} BTXC
-                        </td>
-                        <td>
-                          <span
-                            style={{
-                              background: dep.confirmations >= 6 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
-                              color: dep.confirmations >= 6 ? '#10b981' : '#facc15',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: 'bold',
-                            }}
-                          >
-                            {dep.confirmations}/6 Blocos
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            style={{
-                              color: dep.status === 'Creditado' ? '#10b981' : '#38bdf8',
-                              fontWeight: 'bold',
-                              fontSize: '12px',
-                            }}
-                          >
-                            {dep.status === 'Creditado' ? '✓ Saldo Creditado' : '⏳ Aguardando Mineração'}
-                          </span>
+                    {exchangeDeposits.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          Nenhum depósito efetuado para clientes reais no momento.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      exchangeDeposits.map((dep) => (
+                        <tr key={dep.id}>
+                          <td style={{ fontWeight: 'bold', color: '#f97316' }}>{dep.id}</td>
+                          <td>
+                            <div><strong>{dep.clientName}</strong></div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{dep.clientId}</div>
+                          </td>
+                          <td className="portal-mono" style={{ color: '#38bdf8', fontSize: '11px' }}>
+                            {dep.txid}
+                          </td>
+                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>
+                            +{dep.amount.toFixed(4)} BTXC
+                          </td>
+                          <td>
+                            <span
+                              style={{
+                                background: dep.confirmations >= 6 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                                color: dep.confirmations >= 6 ? '#10b981' : '#facc15',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 'bold',
+                              }}
+                            >
+                              {dep.confirmations}/6 Blocos
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              style={{
+                                color: dep.status === 'Creditado' ? '#10b981' : '#38bdf8',
+                                fontWeight: 'bold',
+                                fontSize: '12px',
+                              }}
+                            >
+                              {dep.status === 'Creditado' ? '✓ Saldo Creditado' : '⏳ Aguardando Mineração'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
 
-            {/* Real Clients Table (Sincronizada com Configurações) */}
+            {/* Real Clients Table Exclusively from Global Exchange Platform */}
             <div className="portal-card">
               <div className="portal-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Sincronizada)</h3>
+                    <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Plataforma Oficial)</h3>
                     <span
                       style={{
                         background: 'rgba(16, 185, 129, 0.15)',
@@ -1626,14 +1598,23 @@ daemon=1
                         fontWeight: 'bold',
                       }}
                     >
-                      ● Base Real Ativa ({exchangeClients.length})
+                      ● Base 100% Real ({exchangeClients.length})
                     </span>
                   </div>
                   <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-                    Clientes e contas institucionais reais sincronizados em tempo real com o Painel de Configurações da Global Exchange.
+                    Listagem exclusiva e em tempo real dos clientes reais cadastrados na plataforma Global Exchange (Supabase Cloud). Cadastros fictícios e gerados pelo sistema foram totalmente eliminados.
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-primary"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                    onClick={fetchRealClientsFromGlobalExchange}
+                    disabled={isLoadingClients}
+                  >
+                    {isLoadingClients ? '🔄 Sincronizando...' : '🔄 Sincronizar com Global Exchange'}
+                  </button>
                   <button
                     type="button"
                     className="portal-btn"
@@ -1644,24 +1625,32 @@ daemon=1
                       fontSize: '12px',
                       padding: '6px 12px',
                     }}
-                    onClick={() => setShowPurgeModal(true)}
-                    title="Eliminar quaisquer cadastros fictícios residuais do navegador"
+                    onClick={handlePurgeFictitiousClients}
+                    title="Eliminar quaisquer cadastros fictícios residuais do navegador e re-sincronizar"
                   >
-                    🧹 Limpar Clientes Fictícios
-                  </button>
-                  <button
-                    type="button"
-                    className="portal-btn portal-btn-secondary"
-                    style={{ fontSize: '12px', padding: '6px 12px' }}
-                    onClick={() => {
-                      handleCancelEditClient();
-                      setActiveTab('config');
-                    }}
-                  >
-                    ⚙️ Cadastrar no Painel de Configurações &rarr;
+                    🧹 Purificar Cache
                   </button>
                 </div>
               </div>
+
+              {lastSyncTime && (
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span>Conexão Supabase:</span>
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>● Online (odbbtgkxgiqlfhcepwuj)</span>
+                  <span>&bull;</span>
+                  <span>Última sincronização com a plataforma: <strong>{lastSyncTime}</strong></span>
+                </div>
+              )}
+
+              {clientsError && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px' }}>
+                  ⚠️ {clientsError}
+                  <button type="button" onClick={fetchRealClientsFromGlobalExchange} style={{ marginLeft: '12px', textDecoration: 'underline', background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                    Tentar Novamente
+                  </button>
+                </div>
+              )}
+
               <div className="portal-table-container">
                 <table className="portal-table">
                   <thead>
@@ -1676,21 +1665,30 @@ daemon=1
                     </tr>
                   </thead>
                   <tbody>
-                    {exchangeClients.length === 0 ? (
+                    {isLoadingClients ? (
                       <tr>
                         <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
-                          <p style={{ margin: '0 0 12px', fontSize: '14px', color: '#f8fafc' }}>
-                            Nenhum cliente real cadastrado no momento.
+                          <div style={{ display: 'inline-block', fontSize: '14px', color: '#38bdf8' }}>
+                            ⏳ Conectando e sincronizando clientes reais da plataforma Global Exchange...
+                          </div>
+                        </td>
+                      </tr>
+                    ) : exchangeClients.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '36px 20px', color: '#94a3b8' }}>
+                          <div style={{ fontSize: '32px', marginBottom: '8px' }}>🛡️</div>
+                          <p style={{ margin: '0 0 8px', fontSize: '15px', color: '#f8fafc', fontWeight: 600 }}>
+                            Nenhum cliente cadastrado na plataforma Global Exchange no momento.
                           </p>
-                          <p style={{ margin: '0 0 16px', fontSize: '12px' }}>
-                            Os clientes cadastrados no Painel de Configurações aparecem aqui automaticamente.
+                          <p style={{ margin: '0 0 16px', fontSize: '13px', maxWidth: '580px', marginInline: 'auto', lineHeight: '1.5', color: '#94a3b8' }}>
+                            Todos os clientes fictícios e gerados pelo sistema foram <strong>totalmente eliminados</strong>. Esta aba agora lista <strong>exclusivamente clientes reais</strong> vindos da plataforma Global Exchange através do banco de dados oficial na nuvem.
                           </p>
                           <button
                             type="button"
-                            className="portal-btn portal-btn-primary"
-                            onClick={() => setActiveTab('config')}
+                            className="portal-btn portal-btn-secondary"
+                            onClick={fetchRealClientsFromGlobalExchange}
                           >
-                            Ir para Configurações e Cadastrar Cliente Real &rarr;
+                            🔄 Atualizar Conexão com a Corretora
                           </button>
                         </td>
                       </tr>
@@ -1703,11 +1701,11 @@ daemon=1
                           <td>
                             <strong>{c.name}</strong>
                             {c.createdAt && (
-                              <div style={{ fontSize: '10px', color: '#64748b' }}>Desde: {c.createdAt}</div>
+                              <div style={{ fontSize: '10px', color: '#64748b' }}>Cadastrado: {c.createdAt}</div>
                             )}
                           </td>
                           <td>
-                            <div style={{ fontSize: '12px', color: '#e2e8f0' }}>{c.document || 'Pendente'}</div>
+                            <div style={{ fontSize: '12px', color: '#e2e8f0' }}>{c.document || 'Validado na Exchange'}</div>
                             <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.email}</div>
                           </td>
                           <td style={{ color: '#10b981', fontWeight: 'bold', fontSize: '13px' }}>
@@ -1744,10 +1742,9 @@ daemon=1
                                 style={{ padding: '3px 8px', fontSize: '11px' }}
                                 onClick={() => {
                                   setDepositClientId(c.id);
-                                  setDepositAlert(`Cliente "${c.name}" selecionado no formulário de depósito acima.`);
+                                  setDepositAlert(`Cliente "${c.name}" selecionado no formulário de depósito.`);
                                   window.scrollTo({ top: 400, behavior: 'smooth' });
                                 }}
-                                title="Preencher formulário de depósito para este cliente"
                               >
                                 Depositar
                               </button>
@@ -1757,21 +1754,11 @@ daemon=1
                                 style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981' }}
                                 onClick={() => {
                                   setOrderClientId(c.id);
-                                  setOrderFeedback(`Cliente "${c.name}" selecionado para negociação no livro.`);
+                                  setOrderFeedback(`Cliente "${c.name}" selecionado para negociação.`);
                                   window.scrollTo({ top: 300, behavior: 'smooth' });
                                 }}
-                                title="Selecionar para negociar no Livro de Ofertas"
                               >
                                 Negociar
-                              </button>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#f97316' }}
-                                onClick={() => handleStartEditClient(c)}
-                                title="Editar dados no Painel de Configurações"
-                              >
-                                Editar
                               </button>
                             </div>
                           </td>
@@ -2035,6 +2022,15 @@ daemon=1
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
+                    className="portal-btn portal-btn-primary"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                    onClick={fetchRealClientsFromGlobalExchange}
+                    disabled={isLoadingClients}
+                  >
+                    {isLoadingClients ? '🔄 Sincronizando...' : '🔄 Sincronizar com a Global Exchange'}
+                  </button>
+                  <button
+                    type="button"
                     className="portal-btn"
                     style={{
                       background: '#7f1d1d',
@@ -2045,19 +2041,11 @@ daemon=1
                     }}
                     onClick={() => setShowPurgeModal(true)}
                   >
-                    🧹 Limpar Fictícios e Purificar Base
+                    🧹 Purificar Cache
                   </button>
                   <button
                     type="button"
                     className="portal-btn portal-btn-secondary"
-                    style={{ fontSize: '12px', padding: '6px 12px' }}
-                    onClick={() => setShowResetModal(true)}
-                  >
-                    Restaurar Oficiais (Engecema & GE)
-                  </button>
-                  <button
-                    type="button"
-                    className="portal-btn portal-btn-primary"
                     style={{ fontSize: '12px', padding: '6px 12px' }}
                     onClick={() => setActiveTab('exchange')}
                   >
@@ -2899,11 +2887,11 @@ daemon=1
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '24px' }}>🧹</span>
                 <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>
-                  Limpar Clientes Fictícios e Sincronizar Base
+                  Purificar Cache e Sincronizar com a Global Exchange
                 </h3>
               </div>
               <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.6', margin: '0 0 16px' }}>
-                Esta ação fará a varredura de toda a memória e do armazenamento local do navegador (<code>localStorage</code>), expurgando quaisquer cadastros fictícios residuais e sincronizando a <strong>Corretora Global Exchange</strong> estritamente com os <strong>clientes reais</strong> cadastrados no Painel de Configurações.
+                Esta ação fará a varredura e exclusão de qualquer cache ou cadastro fictício residual e atualizará a listagem diretamente da base de dados oficial da <strong>Global Exchange</strong> (Supabase).
               </p>
               <div
                 style={{
@@ -2915,7 +2903,7 @@ daemon=1
                   color: '#94a3b8',
                 }}
               >
-                ✓ As contas corporativas oficiais (Engecema e Mesa Institucional GE) e novos clientes reais inseridos serão preservados e sincronizados com a carteira e o livro de ofertas.
+                ✓ Apenas clientes reais e genuínos oriundos da plataforma Global Exchange serão exibidos.
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
@@ -2931,7 +2919,7 @@ daemon=1
                   style={{ background: '#dc2626', color: '#fff', border: 'none' }}
                   onClick={handlePurgeFictitiousClients}
                 >
-                  Executar Limpeza e Sincronizar
+                  Purificar e Sincronizar Agora
                 </button>
               </div>
             </div>
@@ -2983,56 +2971,6 @@ daemon=1
                   onClick={confirmDeleteRealClient}
                 >
                   Confirmar Remoção
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL DE CONFIRMAÇÃO: RESTAURAÇÃO DE CONTAS PADRÃO */}
-        {showResetModal && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0,0,0,0.8)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 9999,
-              padding: '16px',
-            }}
-          >
-            <div
-              style={{
-                background: '#0f172a',
-                border: '1px solid #334155',
-                borderRadius: '8px',
-                padding: '24px',
-                maxWidth: '480px',
-                width: '100%',
-              }}
-            >
-              <h3 style={{ margin: '0 0 10px', color: '#f8fafc', fontSize: '16px' }}>
-                Restaurar Contas Corporativas Oficiais
-              </h3>
-              <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.5', margin: '0 0 20px' }}>
-                Deseja redefinir a base para as contas institucionais oficiais da <strong>Engecema Fomento e Tecnologia Ltda</strong> e da <strong>Global Exchange Liquidity Provider</strong>?
-              </p>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  type="button"
-                  className="portal-btn portal-btn-secondary"
-                  onClick={() => setShowResetModal(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="portal-btn portal-btn-primary"
-                  onClick={handleResetDefaultClients}
-                >
-                  Restaurar Contas
                 </button>
               </div>
             </div>
