@@ -418,9 +418,13 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       const payload: any = {
         name: clientRecord.name,
         email: clientRecord.email,
+        document: clientRecord.document || null,
+        id: clientRecord.id,
+        btxc_balance: clientRecord.btxcBalance || 0,
+        brl_balance: clientRecord.brlBalance || 0,
+        usdt_balance: clientRecord.usdtBalance || 0,
+        status: clientRecord.status || 'Verificado KYC',
       };
-      if (clientRecord.document) payload.document = clientRecord.document;
-      if (clientRecord.id) payload.id = clientRecord.id;
 
       const { error } = await supabase.from('clients').upsert([payload]);
 
