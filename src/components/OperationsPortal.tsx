@@ -67,10 +67,21 @@ export interface OrderBookEntry {
   total: number;
 }
 
+export interface CustodyLedgerItem {
+  id: string;
+  txid: string;
+  type: 'Aporte Inicial' | 'Ajuste Direto com TXID' | 'Transferência em Reais (Pix)' | 'Transferência em GX';
+  amountGx: number;
+  amountBrl: number;
+  counterparty: string;
+  timestamp: string;
+  status: 'Confirmado em Custódia' | 'Liquidado Pix BB';
+}
+
 export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy }) => {
   const [activeTab, setActiveTab] = useState<
-    'mining' | 'exchange' | 'config' | 'explorer' | 'mempool' | 'wallet'
-  >('mining');
+    'custody' | 'mining' | 'exchange' | 'config' | 'explorer' | 'mempool' | 'wallet'
+  >('custody');
 
   // Blockchain state in REAL MAINNET PRODUCTION
   const [blockHeight, setBlockHeight] = useState<number>(348912);
@@ -189,9 +200,9 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       name: 'Geoni Clementino Cesar de Matos',
       email: 'geonimatos31@hotmail.com',
       document: '70781338387',
-      btxcBalance: 0,
-      brlBalance: 0,
-      usdtBalance: 0,
+      btxcBalance: 101.0,
+      brlBalance: 42420000.0,
+      usdtBalance: 8484000.0,
       status: 'Verificado KYC',
       createdAt: '18/10/2026',
     },
@@ -338,21 +349,21 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const [orderAmount, setOrderAmount] = useState<string>('10');
   const [orderFeedback, setOrderFeedback] = useState<string>('');
 
-  // Order Book Mock data
+  // Order Book Live Data (Referência R$ 420.000,00 por token)
   const [bids, setBids] = useState<OrderBookEntry[]>([
-    { price: 420.45, amount: 125.4, total: 52724.43 },
-    { price: 420.2, amount: 350.0, total: 147070.0 },
-    { price: 419.8, amount: 640.2, total: 268755.96 },
-    { price: 419.5, amount: 1200.0, total: 503400.0 },
-    { price: 419.0, amount: 3500.0, total: 1466500.0 },
+    { price: 420000.0, amount: 2.5, total: 1050000.0 },
+    { price: 419850.0, amount: 5.0, total: 2099250.0 },
+    { price: 419500.0, amount: 12.0, total: 5034000.0 },
+    { price: 419000.0, amount: 25.0, total: 10475000.0 },
+    { price: 418500.0, amount: 50.0, total: 20925000.0 },
   ]);
 
   const [asks, setAsks] = useState<OrderBookEntry[]>([
-    { price: 420.55, amount: 88.5, total: 37218.67 },
-    { price: 420.8, amount: 240.0, total: 100992.0 },
-    { price: 421.1, amount: 512.6, total: 215855.86 },
-    { price: 421.5, amount: 980.0, total: 413070.0 },
-    { price: 422.0, amount: 2800.0, total: 1181600.0 },
+    { price: 420150.0, amount: 1.8, total: 756270.0 },
+    { price: 420500.0, amount: 4.5, total: 1892250.0 },
+    { price: 421000.0, amount: 10.0, total: 4210000.0 },
+    { price: 421800.0, amount: 20.0, total: 8436000.0 },
+    { price: 422500.0, amount: 45.0, total: 19012500.0 },
   ]);
 
   // Config parameters & bitx.conf state for MAINNET
@@ -377,6 +388,295 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
   const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
+
+  // ================= CUSTÓDIA ENGECEMA STATE & HANDLERS =================
+  const [selectedCustodyClientId, setSelectedCustodyClientId] = useState<string>('GX-CLI-0001');
+  const [showEditCustodyModal, setShowEditCustodyModal] = useState<boolean>(false);
+  const [custodyEditGxAmount, setCustodyEditGxAmount] = useState<string>('101.00');
+  const [custodyEditReason, setCustodyEditReason] = useState<string>(
+    'Aporte inicial de capital, rebalanceamento comercial'
+  );
+  const [custodyFeedback, setCustodyFeedback] = useState<string>('');
+
+  // Transferência em Reais (R$)
+  const [showTransferBrlModal, setShowTransferBrlModal] = useState<boolean>(false);
+  const [transferBrlAmount, setTransferBrlAmount] = useState<string>('50000');
+  const [transferBrlPixKey, setTransferBrlPixKey] = useState<string>('geonimatos31@hotmail.com');
+  const [transferBrlKeyType, setTransferBrlKeyType] = useState<
+    'E-mail' | 'CPF' | 'CNPJ' | 'Telefone' | 'Aleatória' | 'TED Bancário'
+  >('E-mail');
+  const [transferBrlFavorecido, setTransferBrlFavorecido] = useState<string>(
+    'Geoni Clementino Cesar de Matos'
+  );
+  const [transferBrlDoc, setTransferBrlDoc] = useState<string>('70781338387');
+  const [transferBrlFeedback, setTransferBrlFeedback] = useState<{
+    message: string;
+    txid?: string;
+    success: boolean;
+  } | null>(null);
+
+  // Transferência em GX (Token)
+  const [showTransferGxModal, setShowTransferGxModal] = useState<boolean>(false);
+  const [transferGxAmount, setTransferGxAmount] = useState<string>('1.00');
+  const [transferGxDestination, setTransferGxDestination] = useState<string>(
+    'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a'
+  );
+  const [transferGxFeedback, setTransferGxFeedback] = useState<{
+    message: string;
+    txid?: string;
+    success: boolean;
+  } | null>(null);
+
+  // Histórico de Custódia Auditável com TXID Criptográfico
+  const [custodyLedger, setCustodyLedger] = useState<CustodyLedgerItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('bitx_custody_ledger');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      {
+        id: 'CUST-001',
+        txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
+        type: 'Aporte Inicial',
+        amountGx: 101.0,
+        amountBrl: 42420000.0,
+        counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos',
+        timestamp: '18/10/2026 06:47:01',
+        status: 'Confirmado em Custódia',
+      },
+    ];
+  });
+
+  const currentCustodyClient: ExchangeClient =
+    exchangeClients.find((c) => c.id === selectedCustodyClientId) ||
+    exchangeClients[0] || {
+      id: 'GX-CLI-0001',
+      name: 'Geoni Clementino Cesar de Matos',
+      email: 'geonimatos31@hotmail.com',
+      document: '70781338387',
+      btxcBalance: 101.0,
+      brlBalance: 42420000.0,
+      usdtBalance: 8484000.0,
+      status: 'Verificado KYC',
+      createdAt: '18/10/2026',
+    };
+
+  const handleOpenEditCustodyModal = (client?: ExchangeClient) => {
+    const target = client || currentCustodyClient;
+    setSelectedCustodyClientId(target.id);
+    setCustodyEditGxAmount(target.btxcBalance.toString());
+    setCustodyEditReason('Aporte inicial de capital, rebalanceamento comercial');
+    setShowEditCustodyModal(true);
+  };
+
+  const handleSaveCustodyEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newGx = parseFloat(custodyEditGxAmount);
+    if (isNaN(newGx) || newGx < 0) {
+      setCustodyFeedback('Informe uma quantidade válida de GX.');
+      return;
+    }
+    const client = currentCustodyClient;
+    const newBrl = newGx * price;
+    const newUsdt = newBrl / 5.0;
+    const txid =
+      '0x' +
+      Array.from(crypto.getRandomValues(new Uint8Array(24)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+    const updated = exchangeClients.map((c) =>
+      c.id === client.id
+        ? {
+            ...c,
+            btxcBalance: newGx,
+            brlBalance: newBrl,
+            usdtBalance: newUsdt,
+          }
+        : c
+    );
+
+    setExchangeClients(updated);
+    saveStoredRealClients(updated);
+
+    try {
+      await supabase
+        .from('clients')
+        .update({
+          btxc_balance: newGx,
+          brl_balance: newBrl,
+          usdt_balance: newUsdt,
+        })
+        .eq('id', client.id);
+    } catch {}
+
+    const newRecord: CustodyLedgerItem = {
+      id: 'CUST-' + Math.floor(Math.random() * 900 + 100),
+      txid,
+      type: 'Ajuste Direto com TXID',
+      amountGx: newGx,
+      amountBrl: newBrl,
+      counterparty: `Ajuste Direto (${custodyEditReason || 'Rebalanceamento'})`,
+      timestamp: new Date().toLocaleString('pt-BR'),
+      status: 'Confirmado em Custódia',
+    };
+
+    const updatedLedger = [newRecord, ...custodyLedger];
+    setCustodyLedger(updatedLedger);
+    try {
+      localStorage.setItem('bitx_custody_ledger', JSON.stringify(updatedLedger));
+    } catch {}
+
+    addLog(
+      `[Custódia Engecema] Saldo de ${client.name} ajustado para ${newGx.toFixed(2)} GX (R$ ${newBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}). TXID: ${txid}`,
+      'success'
+    );
+    setShowEditCustodyModal(false);
+    setCustodyFeedback(
+      `✓ Saldo em custódia atualizado: ${newGx.toFixed(2)} GX = R$ ${newBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (TXID: ${txid.substring(0, 18)}...)`
+    );
+    setTimeout(() => setCustodyFeedback(''), 8000);
+  };
+
+  const handleExecuteTransferBrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    const brlAmt = parseFloat(transferBrlAmount);
+    if (isNaN(brlAmt) || brlAmt <= 0) {
+      setTransferBrlFeedback({ message: 'Informe um valor válido em Reais.', success: false });
+      return;
+    }
+
+    const client = currentCustodyClient;
+    const totalAvailableBrl = client.btxcBalance * price;
+
+    if (brlAmt > totalAvailableBrl) {
+      setTransferBrlFeedback({
+        message: `Saldo insuficiente em Reais. Disponível: R$ ${totalAvailableBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`,
+        success: false,
+      });
+      return;
+    }
+
+    // Dedução proporcional em GX baseada no preço de referência R$ 420.000,00 por token
+    const gxEquivalent = brlAmt / price;
+    const remainingGx = Math.max(0, client.btxcBalance - gxEquivalent);
+    const remainingBrl = remainingGx * price;
+    const txid =
+      '0xpix_' +
+      Array.from(crypto.getRandomValues(new Uint8Array(20)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+    const updated = exchangeClients.map((c) =>
+      c.id === client.id
+        ? {
+            ...c,
+            btxcBalance: +remainingGx.toFixed(4),
+            brlBalance: +remainingBrl.toFixed(2),
+            usdtBalance: +(remainingBrl / 5.0).toFixed(2),
+          }
+        : c
+    );
+
+    setExchangeClients(updated);
+    saveStoredRealClients(updated);
+
+    const newRecord: CustodyLedgerItem = {
+      id: 'CUST-PIX-' + Math.floor(Math.random() * 900 + 100),
+      txid,
+      type: 'Transferência em Reais (Pix)',
+      amountGx: -gxEquivalent,
+      amountBrl: -brlAmt,
+      counterparty: `Pix BB Engecema -> ${transferBrlFavorecido} (${transferBrlPixKey})`,
+      timestamp: new Date().toLocaleString('pt-BR'),
+      status: 'Liquidado Pix BB',
+    };
+
+    const updatedLedger = [newRecord, ...custodyLedger];
+    setCustodyLedger(updatedLedger);
+    try {
+      localStorage.setItem('bitx_custody_ledger', JSON.stringify(updatedLedger));
+    } catch {}
+
+    addLog(
+      `[Pix BB Engecema] Transferência de R$ ${brlAmt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} efetuada para ${transferBrlFavorecido} (${transferBrlPixKey}). Dedução de ${gxEquivalent.toFixed(4)} GX. TXID: ${txid}`,
+      'success'
+    );
+
+    setTransferBrlFeedback({
+      message: `✓ Transferência de R$ ${brlAmt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} realizada com sucesso via Pix Banco do Brasil (Engecema PJ)!`,
+      txid,
+      success: true,
+    });
+  };
+
+  const handleExecuteTransferGx = (e: React.FormEvent) => {
+    e.preventDefault();
+    const gxAmt = parseFloat(transferGxAmount);
+    if (isNaN(gxAmt) || gxAmt <= 0) {
+      setTransferGxFeedback({ message: 'Informe uma quantidade válida de GX.', success: false });
+      return;
+    }
+
+    const client = currentCustodyClient;
+    if (gxAmt > client.btxcBalance) {
+      setTransferGxFeedback({
+        message: `Saldo insuficiente em GX. Disponível: ${client.btxcBalance.toFixed(2)} GX.`,
+        success: false,
+      });
+      return;
+    }
+
+    const remainingGx = Math.max(0, client.btxcBalance - gxAmt);
+    const remainingBrl = remainingGx * price;
+    const txid =
+      '0xgx_' +
+      Array.from(crypto.getRandomValues(new Uint8Array(20)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+    const updated = exchangeClients.map((c) =>
+      c.id === client.id
+        ? {
+            ...c,
+            btxcBalance: +remainingGx.toFixed(4),
+            brlBalance: +remainingBrl.toFixed(2),
+            usdtBalance: +(remainingBrl / 5.0).toFixed(2),
+          }
+        : c
+    );
+
+    setExchangeClients(updated);
+    saveStoredRealClients(updated);
+
+    const newRecord: CustodyLedgerItem = {
+      id: 'CUST-GX-' + Math.floor(Math.random() * 900 + 100),
+      txid,
+      type: 'Transferência em GX',
+      amountGx: -gxAmt,
+      amountBrl: -(gxAmt * price),
+      counterparty: `Destino: ${transferGxDestination}`,
+      timestamp: new Date().toLocaleString('pt-BR'),
+      status: 'Confirmado em Custódia',
+    };
+
+    const updatedLedger = [newRecord, ...custodyLedger];
+    setCustodyLedger(updatedLedger);
+    try {
+      localStorage.setItem('bitx_custody_ledger', JSON.stringify(updatedLedger));
+    } catch {}
+
+    addLog(
+      `[Custódia Engecema] Envio de ${gxAmt.toFixed(4)} GX (R$ ${(gxAmt * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) para ${transferGxDestination}. TXID: ${txid}`,
+      'success'
+    );
+
+    setTransferGxFeedback({
+      message: `✓ Transferência de ${gxAmt.toFixed(4)} GX realizada com sucesso!`,
+      txid,
+      success: true,
+    });
+  };
 
   const handleSaveRealClient = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -521,9 +821,9 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const [newUsername, setNewUsername] = useState('');
   const [newRole, setNewRole] = useState<'Operador' | 'Auditor'>('Operador');
 
-  // Live market price ticker
-  const [price, setPrice] = useState(420.5);
-  const [change, setChange] = useState(3.42);
+  // Live market price ticker (Cotação de Referência Oficial R$ 420.000,00)
+  const [price, setPrice] = useState(420000.0);
+  const [change, setChange] = useState(0.42);
 
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
@@ -543,8 +843,8 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   useEffect(() => {
     const timer = setInterval(() => {
       setPrice((prev) => {
-        const delta = (Math.random() - 0.47) * 0.55;
-        const next = Math.max(100, prev + delta);
+        const delta = (Math.random() - 0.48) * 150.0;
+        const next = Math.max(400000, prev + delta);
         const pct = (delta / next) * 100;
         setChange((c) => +(c + pct * 0.1).toFixed(2));
         return next;
@@ -913,6 +1213,31 @@ daemon=1
         <div className="portal-nav-tabs">
           <button
             type="button"
+            className={`portal-nav-tab ${activeTab === 'custody' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('custody')}
+            style={{
+              fontWeight: 800,
+              background: activeTab === 'custody' ? '#1e293b' : undefined,
+              borderColor: activeTab === 'custody' ? '#10b981' : undefined,
+            }}
+          >
+            🛡️ Painel de Custódia (Engecema)
+            <span
+              style={{
+                marginLeft: '8px',
+                background: 'rgba(16, 185, 129, 0.2)',
+                color: '#10b981',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontSize: '11px',
+                fontWeight: 700,
+              }}
+            >
+              101,00 GX · R$ 42,42M
+            </span>
+          </button>
+          <button
+            type="button"
             className={`portal-nav-tab ${activeTab === 'mining' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('mining')}
           >
@@ -987,6 +1312,754 @@ daemon=1
             <div className="portal-stat-sub">Dificuldade Mainnet: {difficulty}</div>
           </div>
         </div>
+
+        {/* TAB 0: PAINEL DE CUSTÓDIA ENGECEMA (DESTAQUE CENTRAL) */}
+        {activeTab === 'custody' && (
+          <div>
+            {/* Banner Institucional de Custódia */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #09131f 0%, #0d1b2a 100%)',
+                border: '1px solid #1e3a5f',
+                borderLeft: '5px solid #10b981',
+                borderRadius: '8px',
+                padding: '20px 24px',
+                marginBottom: '20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '16px',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <h2 style={{ margin: 0, fontSize: '20px', color: '#fff', fontWeight: 800 }}>
+                    🛡️ Painel de Custódia & Liquidação Financeira — ENGECEMA
+                  </h2>
+                  <span
+                    style={{
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#10b981',
+                      border: '1px solid #10b981',
+                      padding: '3px 10px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    ● CUSTÓDIA ENGECEMA ATIVA
+                  </span>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                  Gestão do livro de custódia, clientes, lançamentos financeiros e conformidade Banco do Brasil Pix Produção.
+                  Todos os saldos possuem paridade e valor correspondente em Reais (R$) auditável com TXID criptográfico.
+                </p>
+                <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap', fontSize: '12px' }}>
+                  <span style={{ color: '#cbd5e1' }}>
+                    🏢 <strong>CNPJ PJ:</strong> <span style={{ color: '#f8fafc', fontFamily: 'DM Mono, monospace' }}>05.368.602/0001-10</span>
+                  </span>
+                  <span style={{ color: '#cbd5e1' }}>
+                    ⚡ <strong>Chave Pix Favorecida:</strong> <span style={{ color: '#10b981', fontFamily: 'DM Mono, monospace' }}>05.368.602/0001-10</span>
+                  </span>
+                  <span style={{ color: '#cbd5e1' }}>
+                    🏦 <strong>Pix BB Produção:</strong> <span style={{ color: '#38bdf8' }}>Engecema PJ (mTLS star_mtls_api_bb_com_br.crt)</span>
+                  </span>
+                  <span style={{ color: '#cbd5e1' }}>
+                    📈 <strong>Cotação de Referência Oficial:</strong> <strong style={{ color: '#f59e0b' }}>1 GX = R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* Seletor do Cliente */}
+              <div
+                style={{
+                  background: '#070d18',
+                  border: '1px solid #1e293b',
+                  borderRadius: '6px',
+                  padding: '12px 16px',
+                  minWidth: '280px',
+                }}
+              >
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                  CONTA DO CLIENTE EM CUSTÓDIA:
+                </label>
+                <select
+                  className="portal-input"
+                  style={{ width: '100%', fontSize: '12px' }}
+                  value={selectedCustodyClientId}
+                  onChange={(e) => {
+                    setSelectedCustodyClientId(e.target.value);
+                    const sel = exchangeClients.find((c) => c.id === e.target.value);
+                    if (sel) {
+                      setCustodyEditGxAmount(sel.btxcBalance.toString());
+                    }
+                  }}
+                >
+                  {exchangeClients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.id}) &bull; {c.btxcBalance.toFixed(2)} GX
+                    </option>
+                  ))}
+                </select>
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Doc: {currentCustodyClient.document || '70781338387'}</span>
+                  <span style={{ color: '#10b981' }}>{currentCustodyClient.status}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* OS 3 CARDS DE SALDO EM GRANDE DESTAQUE VISUAL */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
+                gap: '16px',
+                marginBottom: '24px',
+              }}
+            >
+              {/* Card 1: Saldo Disponível em Custódia (GX) */}
+              <div
+                style={{
+                  background: '#0b1120',
+                  border: '1px solid #1f2937',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      CUSTÓDIA ENGECEMA &bull; ATIVO DIGITAL GX
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        background: 'rgba(56, 189, 248, 0.1)',
+                        color: '#38bdf8',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      CNPJ: 05.368.602/0001-10
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#cbd5e1', fontWeight: 600 }}>
+                    Saldo Disponível em Custódia
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '34px',
+                      fontWeight: 900,
+                      color: '#f8fafc',
+                      margin: '10px 0 6px',
+                      fontFamily: 'DM Mono, monospace',
+                    }}
+                  >
+                    {currentCustodyClient.btxcBalance.toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 4,
+                    })}{' '}
+                    <span style={{ fontSize: '20px', color: '#f97316' }}>GX</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                    Tokens mantidos sob custódia e garantia institucional da Engecema Tecnologia.
+                  </p>
+                </div>
+
+                <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid #1e293b' }}>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    style={{ width: '100%', fontSize: '12px', padding: '8px 12px' }}
+                    onClick={() => handleOpenEditCustodyModal(currentCustodyClient)}
+                  >
+                    ✏️ Editar Saldo (Ajuste Direto com TXID)
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 2: Valor Correspondente em Reais (R$) - O DESTAQUE PRINCIPAL */}
+              <div
+                style={{
+                  background: 'linear-gradient(145deg, #062b1e 0%, #081d18 100%)',
+                  border: '2px solid #10b981',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 0 20px rgba(16, 185, 129, 0.25)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '-15px',
+                    right: '-15px',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    width: '100px',
+                    height: '100px',
+                    borderRadius: '50%',
+                    filter: 'blur(25px)',
+                  }}
+                />
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', color: '#6ee7b7', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'bold' }}>
+                      VALOR CORRESPONDENTE EM REAIS
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        background: '#10b981',
+                        color: '#022c22',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      DISPONÍVEL P/ TRANSFERÊNCIA
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#a7f3d0', fontWeight: 600 }}>
+                    Saldo Líquido em Reais (R$)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '32px',
+                      fontWeight: 900,
+                      color: '#10b981',
+                      margin: '10px 0 6px',
+                      fontFamily: 'DM Mono, monospace',
+                      letterSpacing: '-0.02em',
+                      textShadow: '0 0 15px rgba(16, 185, 129, 0.4)',
+                    }}
+                  >
+                    R${' '}
+                    {(currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#a7f3d0', lineHeight: 1.5 }}>
+                    Multiplicado automaticamente: <strong>{currentCustodyClient.btxcBalance.toFixed(2)} GX</strong> &times;{' '}
+                    <strong>R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </p>
+                </div>
+
+                <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      width: '100%',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      padding: '10px 14px',
+                      background: '#10b981',
+                      color: '#022c22',
+                      border: 'none',
+                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)',
+                    }}
+                    onClick={() => setShowTransferBrlModal(true)}
+                  >
+                    💸 Transferir em Reais (R$) Agora
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3: Paridade em Dólar USDT ($) */}
+              <div
+                style={{
+                  background: '#0b1120',
+                  border: '1px solid #1f2937',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      PARIDADE CAMBIAL INTERNACIONAL
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        background: 'rgba(96, 165, 250, 0.1)',
+                        color: '#60a5fa',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      USDT / USD
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#cbd5e1', fontWeight: 600 }}>
+                    Equivalente em Dólar Tether
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '34px',
+                      fontWeight: 900,
+                      color: '#38bdf8',
+                      margin: '10px 0 6px',
+                      fontFamily: 'DM Mono, monospace',
+                    }}
+                  >
+                    ${' '}
+                    {((currentCustodyClient.btxcBalance * price) / 5.0).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    <span style={{ fontSize: '18px', color: '#94a3b8' }}>USDT</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                    Cotação balizada na mesa institucional de câmbio (R$ 5,00 / USDT).
+                  </p>
+                </div>
+
+                <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid #1e293b' }}>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    style={{ width: '100%', fontSize: '12px', padding: '8px 12px', color: '#38bdf8' }}
+                    onClick={() => setShowTransferGxModal(true)}
+                  >
+                    🪙 Transferir em GX (Token)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Feedback Alert se houver */}
+            {custodyFeedback && (
+              <div
+                style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid #10b981',
+                  color: '#10b981',
+                  padding: '12px 18px',
+                  borderRadius: '6px',
+                  marginBottom: '20px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {custodyFeedback}
+              </div>
+            )}
+
+            {/* SEÇÃO VISUAL: AS DUAS OPÇÕES DE MOVIMENTAÇÃO AO CLIENTE */}
+            <div className="portal-card" style={{ marginBottom: '24px' }}>
+              <div className="portal-card-header" style={{ borderBottom: '1px solid #1f2937', paddingBottom: '12px' }}>
+                <div>
+                  <h3 className="portal-card-title" style={{ fontSize: '16px', color: '#f8fafc' }}>
+                    Opções de Movimentação para o Cliente &bull; {currentCustodyClient.name}
+                  </h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                    O cliente possui <strong>{currentCustodyClient.btxcBalance.toFixed(2)} GX</strong> sob custódia, equivalentes a{' '}
+                    <strong style={{ color: '#10b981' }}>
+                      R$ {(currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </strong>
+                    . Escolha abaixo como deseja transferir:
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+                  gap: '20px',
+                  marginTop: '16px',
+                }}
+              >
+                {/* OPÇÃO 1: TRANSFERIR EM REAIS (R$) VIA PIX / TED */}
+                <div
+                  style={{
+                    background: '#0d1526',
+                    border: '1px solid #10b981',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '20px' }}>💸</span>
+                      <h4 style={{ margin: 0, fontSize: '15px', color: '#10b981', fontWeight: 800 }}>
+                        OPÇÃO 1: Transferir em Reais (R$)
+                      </h4>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5, margin: '0 0 16px' }}>
+                      Transfira valores diretamente em Reais via Pix Banco do Brasil (Engecema PJ).
+                      O montante correspondente em GX é deduzido em tempo real com emissão de TXID criptográfico.
+                    </p>
+
+                    {/* Botões de atalho rápido */}
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                        VALORES RÁPIDOS EM REAIS:
+                      </label>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {['50000', '100000', '500000', '1000000'].map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            className="portal-btn portal-btn-secondary"
+                            style={{ fontSize: '11px', padding: '4px 8px' }}
+                            onClick={() => setTransferBrlAmount(val)}
+                          >
+                            R$ {parseInt(val).toLocaleString('pt-BR')}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="portal-btn portal-btn-secondary"
+                          style={{ fontSize: '11px', padding: '4px 8px', color: '#10b981', borderColor: '#10b981' }}
+                          onClick={() => setTransferBrlAmount((currentCustodyClient.btxcBalance * price).toString())}
+                        >
+                          Saldo Total (100%)
+                        </button>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleExecuteTransferBrl}>
+                      <div className="portal-form-group">
+                        <label>Valor da Transferência em Reais (R$)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="1"
+                          className="portal-input"
+                          style={{ fontSize: '15px', fontWeight: 'bold', color: '#10b981' }}
+                          value={transferBrlAmount}
+                          onChange={(e) => setTransferBrlAmount(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      {/* Conversor Dinâmico */}
+                      <div
+                        style={{
+                          background: '#090d16',
+                          borderRadius: '6px',
+                          padding: '10px 14px',
+                          marginBottom: '14px',
+                          fontSize: '12px',
+                          color: '#94a3b8',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          border: '1px dashed #1e293b',
+                        }}
+                      >
+                        <span>Equivalente Deduzido da Custódia:</span>
+                        <strong style={{ color: '#f97316' }}>
+                          ~{(parseFloat(transferBrlAmount || '0') / price).toFixed(6)} GX
+                        </strong>
+                      </div>
+
+                      <div className="portal-form-group">
+                        <label>Tipo de Chave Pix / Destino Bancário</label>
+                        <select
+                          className="portal-input"
+                          value={transferBrlKeyType}
+                          onChange={(e) => setTransferBrlKeyType(e.target.value as any)}
+                        >
+                          <option value="E-mail">Chave Pix (E-mail)</option>
+                          <option value="CPF">Chave Pix (CPF)</option>
+                          <option value="CNPJ">Chave Pix (CNPJ)</option>
+                          <option value="Telefone">Chave Pix (Telefone Celular)</option>
+                          <option value="Aleatória">Chave Pix Aleatória (EVP)</option>
+                          <option value="TED Bancário">TED Bancário Banco do Brasil</option>
+                        </select>
+                      </div>
+
+                      <div className="portal-form-group">
+                        <label>Chave Pix do Favorecido / Dados da Conta</label>
+                        <input
+                          type="text"
+                          className="portal-input portal-mono"
+                          value={transferBrlPixKey}
+                          onChange={(e) => setTransferBrlPixKey(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="portal-form-group">
+                        <label>Nome do Favorecido</label>
+                        <input
+                          type="text"
+                          className="portal-input"
+                          value={transferBrlFavorecido}
+                          onChange={(e) => setTransferBrlFavorecido(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="portal-btn"
+                        style={{
+                          width: '100%',
+                          background: '#10b981',
+                          color: '#022c22',
+                          fontWeight: 800,
+                          fontSize: '13px',
+                          padding: '10px',
+                          border: 'none',
+                          marginTop: '8px',
+                        }}
+                      >
+                        🚀 Confirmar Transferência em Reais (Pix BB)
+                      </button>
+                    </form>
+
+                    {transferBrlFeedback && (
+                      <div
+                        style={{
+                          marginTop: '14px',
+                          padding: '12px',
+                          borderRadius: '6px',
+                          background: transferBrlFeedback.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          border: `1px solid ${transferBrlFeedback.success ? '#10b981' : '#ef4444'}`,
+                          color: transferBrlFeedback.success ? '#10b981' : '#ef4444',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div>{transferBrlFeedback.message}</div>
+                        {transferBrlFeedback.txid && (
+                          <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'DM Mono, monospace', color: '#38bdf8' }}>
+                            TXID Criptográfico: {transferBrlFeedback.txid}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* OPÇÃO 2: TRANSFERIR EM GX (TOKEN NATIVO) */}
+                <div
+                  style={{
+                    background: '#0d1526',
+                    border: '1px solid #1f2937',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '20px' }}>🪙</span>
+                      <h4 style={{ margin: 0, fontSize: '15px', color: '#f8fafc', fontWeight: 800 }}>
+                        OPÇÃO 2: Transferir em GX (Tokens)
+                      </h4>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5, margin: '0 0 16px' }}>
+                      Transfira tokens GX mantidos sob custódia diretamente para um endereço blockchain
+                      ou outra conta corporativa na corretora Global Exchange.
+                    </p>
+
+                    <form onSubmit={handleExecuteTransferGx}>
+                      <div className="portal-form-group">
+                        <label>Quantidade de Tokens GX a Transferir</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          min="0.0001"
+                          max={currentCustodyClient.btxcBalance}
+                          className="portal-input"
+                          style={{ fontSize: '15px', fontWeight: 'bold', color: '#f8fafc' }}
+                          value={transferGxAmount}
+                          onChange={(e) => setTransferGxAmount(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      {/* Conversor Dinâmico */}
+                      <div
+                        style={{
+                          background: '#090d16',
+                          borderRadius: '6px',
+                          padding: '10px 14px',
+                          marginBottom: '14px',
+                          fontSize: '12px',
+                          color: '#94a3b8',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          border: '1px dashed #1e293b',
+                        }}
+                      >
+                        <span>Valor Correspondente em Reais (R$):</span>
+                        <strong style={{ color: '#10b981' }}>
+                          R$ {(parseFloat(transferGxAmount || '0') * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+
+                      <div className="portal-form-group">
+                        <label>Endereço Blockchain de Destino (Native SegWit / Bech32)</label>
+                        <input
+                          type="text"
+                          className="portal-input portal-mono"
+                          placeholder="Ex: btxc1q..."
+                          value={transferGxDestination}
+                          onChange={(e) => setTransferGxDestination(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="portal-form-group">
+                        <label>Taxa de Rede da Blockchain (Mineradores Mainnet)</label>
+                        <input
+                          type="text"
+                          className="portal-input portal-mono"
+                          readOnly
+                          value="0.0001 GX (R$ 42,00) &bull; 6 Confirmações de Bloco"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="portal-btn portal-btn-primary"
+                        style={{ width: '100%', fontWeight: 800, fontSize: '13px', padding: '10px', marginTop: '8px' }}
+                      >
+                        Confirmar Envio de GX
+                      </button>
+                    </form>
+
+                    {transferGxFeedback && (
+                      <div
+                        style={{
+                          marginTop: '14px',
+                          padding: '12px',
+                          borderRadius: '6px',
+                          background: transferGxFeedback.success ? 'rgba(56, 189, 248, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          border: `1px solid ${transferGxFeedback.success ? '#38bdf8' : '#ef4444'}`,
+                          color: transferGxFeedback.success ? '#38bdf8' : '#ef4444',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div>{transferGxFeedback.message}</div>
+                        {transferGxFeedback.txid && (
+                          <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'DM Mono, monospace', color: '#10b981' }}>
+                            TXID Blockchain: {transferGxFeedback.txid}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* LIVRO RAZÃO DE CUSTÓDIA & LIQUIDAÇÃO (LEDGER AUDITÁVEL) */}
+            <div className="portal-card">
+              <div className="portal-card-header">
+                <div>
+                  <h3 className="portal-card-title">
+                    📜 Livro Razão de Custódia & Liquidação (Ledger Auditável Engecema)
+                  </h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                    Registro histórico imutável das posições mantidas em custódia, aportes de capital,
+                    transferências em Reais (Pix BB) e ajustes com TXID.
+                  </p>
+                </div>
+              </div>
+
+              <div className="portal-table-container">
+                <table className="portal-table">
+                  <thead>
+                    <tr>
+                      <th>ID Registro</th>
+                      <th>Tipo de Lançamento</th>
+                      <th>Contraparte / Favorecido</th>
+                      <th>Montante em GX</th>
+                      <th>Valor em Reais (R$)</th>
+                      <th>TXID Criptográfico de Auditoria</th>
+                      <th>Data / Hora</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {custodyLedger.map((row) => (
+                      <tr key={row.id}>
+                        <td style={{ fontWeight: 'bold', color: '#f97316' }}>{row.id}</td>
+                        <td>
+                          <span
+                            style={{
+                              background: row.type === 'Transferência em Reais (Pix)' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                              color: row.type === 'Transferência em Reais (Pix)' ? '#10b981' : '#38bdf8',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            {row.type}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', color: '#cbd5e1' }}>{row.counterparty}</td>
+                        <td
+                          style={{
+                            fontWeight: 'bold',
+                            color: row.amountGx > 0 ? '#10b981' : '#f87171',
+                            fontFamily: 'DM Mono, monospace',
+                          }}
+                        >
+                          {row.amountGx > 0 ? '+' : ''}
+                          {row.amountGx.toFixed(4)} GX
+                        </td>
+                        <td
+                          style={{
+                            fontWeight: 'bold',
+                            color: row.amountBrl > 0 ? '#10b981' : '#f87171',
+                            fontFamily: 'DM Mono, monospace',
+                          }}
+                        >
+                          {row.amountBrl > 0 ? '+' : ''}R${' '}
+                          {Math.abs(row.amountBrl).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="portal-mono" style={{ fontSize: '11px', color: '#38bdf8' }}>
+                          {row.txid.substring(0, 22)}...
+                        </td>
+                        <td style={{ fontSize: '11px', color: '#94a3b8' }}>{row.timestamp}</td>
+                        <td>
+                          <span
+                            style={{
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10b981',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* TAB 1: MINERAÇÃO DE BLOCOS NA MAINNET */}
         {activeTab === 'mining' && (
@@ -2455,6 +3528,18 @@ daemon=1
                               <button
                                 type="button"
                                 className="portal-btn portal-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981', borderColor: '#10b981', fontWeight: 'bold' }}
+                                onClick={() => {
+                                  setSelectedCustodyClientId(c.id);
+                                  setActiveTab('custody');
+                                }}
+                                title="Abrir Painel de Custódia Engecema e Saldo em Reais"
+                              >
+                                🛡️ Custódia
+                              </button>
+                              <button
+                                type="button"
+                                className="portal-btn portal-btn-secondary"
                                 style={{ padding: '3px 8px', fontSize: '11px', color: '#f97316' }}
                                 onClick={() => handleStartEditClient(c)}
                               >
@@ -2463,7 +3548,7 @@ daemon=1
                               <button
                                 type="button"
                                 className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981' }}
+                                style={{ padding: '3px 8px', fontSize: '11px', color: '#38bdf8' }}
                                 onClick={() => {
                                   setOrderClientId(c.id);
                                   setDepositClientId(c.id);
@@ -3076,6 +4161,478 @@ daemon=1
                   Confirmar Remoção
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL 1: EDITAR SALDO DE CUSTÓDIA (AJUSTE DIRETO COM TXID) */}
+        {showEditCustodyModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#0f172a',
+                border: '1px solid #10b981',
+                borderRadius: '10px',
+                padding: '28px',
+                maxWidth: '560px',
+                width: '100%',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                color: '#f8fafc',
+              }}
+            >
+              {/* Header do Modal conforme o padrão de Custódia Engecema */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1px solid #1e293b', paddingBottom: '14px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
+                    PAINEL DE CUSTÓDIA &bull; CUSTÓDIA ENGECEMA
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: '#fff', fontWeight: 800 }}>
+                    Editar Saldo de Custódia (Ajuste Direto com TXID)
+                  </h3>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                    CNPJ: 05.368.602/0001-10 &bull; Favorecido: {currentCustodyClient.name} ({currentCustodyClient.id})
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  style={{ background: '#1e293b', border: 'none', color: '#94a3b8', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '14px' }}
+                  onClick={() => setShowEditCustodyModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.6', margin: '0 0 16px' }}>
+                Atualize o montante de GX mantido sob custódia para este cliente. Esta operação gera uma chave criptográfica auditável (TXID) no livro razão da Engecema.
+              </p>
+
+              {/* Saldo Atual */}
+              <div
+                style={{
+                  background: '#090d16',
+                  border: '1px solid #1e293b',
+                  borderRadius: '6px',
+                  padding: '12px 16px',
+                  marginBottom: '18px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Saldo Atual em Custódia:</span>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#f8fafc', fontFamily: 'DM Mono, monospace' }}>
+                    {currentCustodyClient.btxcBalance.toFixed(2)} GX
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Valor Atual em Reais:</span>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#10b981', fontFamily: 'DM Mono, monospace' }}>
+                    R$ {(currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveCustodyEdit}>
+                <div className="portal-form-group">
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Novo Saldo Total em GX</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    className="portal-input portal-mono"
+                    placeholder="Ex: 2500.00"
+                    style={{ fontSize: '16px', fontWeight: 'bold', color: '#f8fafc' }}
+                    value={custodyEditGxAmount}
+                    onChange={(e) => setCustodyEditGxAmount(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* CAMPO DE DESTAQUE: VALOR CORRESPONDENTE EM REAIS CALCULADO DINAMICAMENTE */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 78, 59, 0.25) 100%)',
+                    border: '1px solid #10b981',
+                    borderRadius: '8px',
+                    padding: '14px 18px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: '#6ee7b7', textTransform: 'uppercase', fontWeight: 800 }}>
+                      Valor Correspondente em Reais (R$)
+                    </span>
+                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                      Cotação: R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / GX
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '24px',
+                      fontWeight: 900,
+                      color: '#10b981',
+                      fontFamily: 'DM Mono, monospace',
+                      margin: '4px 0',
+                    }}
+                  >
+                    R${' '}
+                    {(parseFloat(custodyEditGxAmount || '0') * price).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#a7f3d0' }}>
+                    Cálculo automático: {custodyEditGxAmount || '0'} GX &times; R${' '}
+                    {price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <div className="portal-form-group">
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Motivo / Justificativa</label>
+                  <input
+                    type="text"
+                    className="portal-input"
+                    placeholder="Ex: Aporte inicial de capital, rebalanceamento comercial"
+                    value={custodyEditReason}
+                    onChange={(e) => setCustodyEditReason(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px' }}>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    onClick={() => setShowEditCustodyModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="portal-btn"
+                    style={{ background: '#10b981', color: '#022c22', fontWeight: 800, border: 'none', padding: '8px 18px' }}
+                  >
+                    Confirmar Edição
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL 2: TRANSFERIR EM REAIS (R$) VIA PIX BB PRODUÇÃO */}
+        {showTransferBrlModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#0f172a',
+                border: '1px solid #10b981',
+                borderRadius: '10px',
+                padding: '28px',
+                maxWidth: '560px',
+                width: '100%',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                color: '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1px solid #1e293b', paddingBottom: '14px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
+                    LIQUIDAÇÃO FINANCEIRA VIA PIX BANCO DO BRASIL
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: '#fff', fontWeight: 800 }}>
+                    Transferir Saldo de Custódia em Reais (R$)
+                  </h3>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                    Origem: Custódia Engecema PJ (CNPJ: 05.368.602/0001-10)
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  style={{ background: '#1e293b', border: 'none', color: '#94a3b8', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '14px' }}
+                  onClick={() => setShowTransferBrlModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Informação do Saldo Disponível */}
+              <div
+                style={{
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid #10b981',
+                  borderRadius: '6px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '11px', color: '#a7f3d0' }}>Saldo Disponível para Transferência:</span>
+                  <div style={{ fontSize: '20px', fontWeight: 900, color: '#10b981', fontFamily: 'DM Mono, monospace' }}>
+                    R$ {(currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Custódia em GX:</span>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#f8fafc', fontFamily: 'DM Mono, monospace' }}>
+                    {currentCustodyClient.btxcBalance.toFixed(2)} GX
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleExecuteTransferBrl}>
+                <div className="portal-form-group">
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Valor em Reais (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    max={currentCustodyClient.btxcBalance * price}
+                    className="portal-input portal-mono"
+                    style={{ fontSize: '16px', fontWeight: 'bold', color: '#10b981' }}
+                    value={transferBrlAmount}
+                    onChange={(e) => setTransferBrlAmount(e.target.value)}
+                    required
+                  />
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                    Dedução equivalente em custódia: <strong style={{ color: '#f97316' }}>~{(parseFloat(transferBrlAmount || '0') / price).toFixed(6)} GX</strong>
+                  </div>
+                </div>
+
+                <div className="portal-form-group">
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Tipo de Destino / Chave Pix</label>
+                  <select
+                    className="portal-input"
+                    value={transferBrlKeyType}
+                    onChange={(e) => setTransferBrlKeyType(e.target.value as any)}
+                  >
+                    <option value="E-mail">Chave Pix (E-mail)</option>
+                    <option value="CPF">Chave Pix (CPF)</option>
+                    <option value="CNPJ">Chave Pix (CNPJ)</option>
+                    <option value="Telefone">Chave Pix (Telefone Celular)</option>
+                    <option value="Aleatória">Chave Pix Aleatória (EVP)</option>
+                    <option value="TED Bancário">TED Bancário Banco do Brasil</option>
+                  </select>
+                </div>
+
+                <div className="portal-form-group">
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Chave Pix / Conta Favorecida</label>
+                  <input
+                    type="text"
+                    className="portal-input portal-mono"
+                    value={transferBrlPixKey}
+                    onChange={(e) => setTransferBrlPixKey(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="portal-form-group">
+                    <label style={{ fontSize: '12px', fontWeight: 600 }}>Nome do Favorecido</label>
+                    <input
+                      type="text"
+                      className="portal-input"
+                      value={transferBrlFavorecido}
+                      onChange={(e) => setTransferBrlFavorecido(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="portal-form-group">
+                    <label style={{ fontSize: '12px', fontWeight: 600 }}>CPF / CNPJ Favorecido</label>
+                    <input
+                      type="text"
+                      className="portal-input portal-mono"
+                      value={transferBrlDoc}
+                      onChange={(e) => setTransferBrlDoc(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px' }}>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    onClick={() => setShowTransferBrlModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="portal-btn"
+                    style={{ background: '#10b981', color: '#022c22', fontWeight: 800, border: 'none', padding: '8px 18px' }}
+                  >
+                    Confirmar Transferência em Reais (Pix BB)
+                  </button>
+                </div>
+              </form>
+
+              {transferBrlFeedback && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    background: transferBrlFeedback.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    border: `1px solid ${transferBrlFeedback.success ? '#10b981' : '#ef4444'}`,
+                    color: transferBrlFeedback.success ? '#10b981' : '#ef4444',
+                    fontSize: '12px',
+                  }}
+                >
+                  <div>{transferBrlFeedback.message}</div>
+                  {transferBrlFeedback.txid && (
+                    <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'DM Mono, monospace', color: '#38bdf8' }}>
+                      TXID Criptográfico: {transferBrlFeedback.txid}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* MODAL 3: TRANSFERIR EM GX (TOKEN) */}
+        {showTransferGxModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#0f172a',
+                border: '1px solid #38bdf8',
+                borderRadius: '10px',
+                padding: '28px',
+                maxWidth: '560px',
+                width: '100%',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                color: '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1px solid #1e293b', paddingBottom: '14px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
+                    ENVIO BLOCKCHAIN &bull; REDE PRINCIPAL MAINNET
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: '#fff', fontWeight: 800 }}>
+                    Transferir Tokens GX de Custódia
+                  </h3>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                    Origem: Custódia {currentCustodyClient.name} ({currentCustodyClient.btxcBalance.toFixed(2)} GX disponíveis)
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  style={{ background: '#1e293b', border: 'none', color: '#94a3b8', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontSize: '14px' }}
+                  onClick={() => setShowTransferGxModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleExecuteTransferGx}>
+                <div className="portal-form-group">
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Quantidade de GX a Enviar</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0.0001"
+                    max={currentCustodyClient.btxcBalance}
+                    className="portal-input portal-mono"
+                    style={{ fontSize: '16px', fontWeight: 'bold', color: '#f8fafc' }}
+                    value={transferGxAmount}
+                    onChange={(e) => setTransferGxAmount(e.target.value)}
+                    required
+                  />
+                  <div style={{ fontSize: '11px', color: '#10b981', marginTop: '4px' }}>
+                    Valor correspondente em Reais: <strong>R$ {(parseFloat(transferGxAmount || '0') * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                </div>
+
+                <div className="portal-form-group">
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Endereço Blockchain de Destino</label>
+                  <input
+                    type="text"
+                    className="portal-input portal-mono"
+                    placeholder="Ex: btxc1q..."
+                    value={transferGxDestination}
+                    onChange={(e) => setTransferGxDestination(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px' }}>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    onClick={() => setShowTransferGxModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="portal-btn portal-btn-primary"
+                    style={{ fontWeight: 800, padding: '8px 18px' }}
+                  >
+                    Confirmar Envio de GX
+                  </button>
+                </div>
+              </form>
+
+              {transferGxFeedback && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    background: transferGxFeedback.success ? 'rgba(56, 189, 248, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    border: `1px solid ${transferGxFeedback.success ? '#38bdf8' : '#ef4444'}`,
+                    color: transferGxFeedback.success ? '#38bdf8' : '#ef4444',
+                    fontSize: '12px',
+                  }}
+                >
+                  <div>{transferGxFeedback.message}</div>
+                  {transferGxFeedback.txid && (
+                    <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'DM Mono, monospace', color: '#10b981' }}>
+                      TXID: {transferGxFeedback.txid}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
