@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const rawPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const port = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 3000;
 
 export default defineConfig({
   plugins: [react()],
