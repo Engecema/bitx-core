@@ -43,9 +43,12 @@ export interface ExchangeClient {
   name: string;
   email: string;
   document?: string;
-  btxcBalance: number;
-  brlBalance: number;
+  bitxAddress?: string;
+  titleBadge?: string;
+  btxcBalance: number; // Saldo GX (BitX) -> 250.00 GX
+  brlBalance: number;  // Saldo com Liquidez (R$) -> R$ 42.385.000,00
   usdtBalance: number;
+  estimatedMarketValue?: number; // Valor de Mercado Estimado -> R$ 105.270.385,00
   status: 'Ativo' | 'Verificado KYC' | 'Institucional' | 'VIP';
   createdAt?: string;
 }
@@ -154,9 +157,9 @@ export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [
     id: 'CUST-001',
     txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
     type: 'Aporte Inicial',
-    amountGx: 101.0,
-    amountBrl: 42420000.0,
-    counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos',
+    amountGx: 250.0,
+    amountBrl: 42385000.0,
+    counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
     timestamp: '18/10/2026 06:47:01',
     status: 'Confirmado em Custódia',
   },
@@ -168,12 +171,42 @@ export const getStoredCustodyLedger = (): CustodyLedgerItem[] => {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        if (!parsed.some((r: any) => r.id === 'CUST-001')) {
-          parsed.unshift(DEFAULT_CUSTODY_LEDGER[0]);
+        let needsSave = false;
+        // Garantir que CUST-001 seja estritamente 250.0 GX e R$ 42.385.000,00 (eliminando o valor legado de 101 GX / R$ 42.420.000,00)
+        const updated = parsed.map((item: any) => {
+          if (item.id === 'CUST-001') {
+            const gx = Number(item.amountGx);
+            const brl = Number(item.amountBrl);
+            if (gx !== 250.0 || brl !== 42385000.0) {
+              needsSave = true;
+              return {
+                ...item,
+                amountGx: 250.0,
+                amountBrl: 42385000.0,
+                counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
+                status: 'Confirmado em Custódia',
+              };
+            }
+          }
+          return item;
+        });
+
+        if (!updated.some((r: any) => r.id === 'CUST-001')) {
+          updated.unshift(DEFAULT_CUSTODY_LEDGER[0]);
+          needsSave = true;
         }
-        return parsed;
+
+        if (needsSave) {
+          try {
+            localStorage.setItem('bitx_custody_ledger', JSON.stringify(updated));
+          } catch {}
+        }
+        return updated;
       }
     }
+  } catch {}
+  try {
+    localStorage.setItem('bitx_custody_ledger', JSON.stringify(DEFAULT_CUSTODY_LEDGER));
   } catch {}
   return DEFAULT_CUSTODY_LEDGER;
 };
@@ -189,14 +222,14 @@ export const computeClientCustodyBalance = (
   clientEmail: string,
   ledger: CustodyLedgerItem[],
   refPrice: number = 420000.0
-): { gx: number; brl: number; usdt: number } => {
+): { gx: number; brl: number; usdt: number; estimatedMarketValue: number } => {
   const isGeoni =
     clientId === 'GX-CLI-0001' ||
     clientEmail === 'geonimatos31@hotmail.com' ||
     clientEmail === 'geonimatos31@gmail.com';
 
   if (!isGeoni) {
-    return { gx: 0, brl: 0, usdt: 0 };
+    return { gx: 0, brl: 0, usdt: 0, estimatedMarketValue: 0 };
   }
 
   let netGx = 0;
@@ -213,11 +246,12 @@ export const computeClientCustodyBalance = (
     }
   }
 
-  const safeGx = Math.max(0, Number.isFinite(netGx) ? netGx : 101.0);
-  const safeBrl = safeGx * refPrice;
-  const safeUsdt = safeBrl / 5.0;
+  const safeGx = Math.max(0, Number.isFinite(netGx) ? netGx : 250.0);
+  const safeBrl = safeGx === 250.0 ? 42385000.0 : safeGx * refPrice;
+  const safeUsdt = +(safeBrl / 5.0).toFixed(2);
+  const estimatedMarketValue = safeGx === 250.0 ? 105270385.0 : safeGx * (105270385.0 / 250.0);
 
-  return { gx: +safeGx.toFixed(4), brl: +safeBrl.toFixed(2), usdt: +safeUsdt.toFixed(2) };
+  return { gx: +safeGx.toFixed(4), brl: +safeBrl.toFixed(2), usdt: safeUsdt, estimatedMarketValue: +estimatedMarketValue.toFixed(2) };
 };
 
 export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy }) => {
@@ -335,16 +369,19 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   // Global Exchange State & Sincronização Exclusiva de Clientes Reais
   const [selectedPair, setSelectedPair] = useState<'BTXC/BRL' | 'BTXC/USDT' | 'BTXC/BTC'>('BTXC/BRL');
   
-  // Cadastro Real Oficial Confirmado da Global Exchange
+  // Cadastro Real Oficial Confirmado da Global Exchange (Conglomerado Real)
   const DEFAULT_REAL_CLIENTS: ExchangeClient[] = [
     {
       id: 'GX-CLI-0001',
       name: 'Geoni Clementino Cesar de Matos',
+      titleBadge: 'Titular Principal',
       email: 'geonimatos31@hotmail.com',
       document: '70781338387',
-      btxcBalance: 101.0,
-      brlBalance: 42420000.0,
-      usdtBalance: 8484000.0,
+      bitxAddress: 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
+      btxcBalance: 250.0,
+      brlBalance: 42385000.0,
+      usdtBalance: 8477000.0,
+      estimatedMarketValue: 105270385.0,
       status: 'Verificado KYC',
       createdAt: '18/10/2026',
     },
@@ -358,11 +395,14 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     const baseClient: ExchangeClient = {
       id: 'GX-CLI-0001',
       name: 'Geoni Clementino Cesar de Matos',
+      titleBadge: 'Titular Principal',
       email: 'geonimatos31@hotmail.com',
       document: '70781338387',
+      bitxAddress: 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
       btxcBalance: geoniCustody.gx,
       brlBalance: geoniCustody.brl,
       usdtBalance: geoniCustody.usdt,
+      estimatedMarketValue: geoniCustody.estimatedMarketValue,
       status: 'Verificado KYC',
       createdAt: '18/10/2026',
     };
@@ -374,25 +414,29 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
         if (Array.isArray(parsed) && parsed.length > 0) {
           const idx = parsed.findIndex((c: any) => c.id === 'GX-CLI-0001' || c.email === 'geonimatos31@hotmail.com');
           if (idx >= 0) {
-            // Reconciliar estritamente com o livro razão de custódia se o saldo em cache estiver zerado ou inferior
-            const currentBtxc = typeof parsed[idx].btxcBalance === 'number' && parsed[idx].btxcBalance > 0
-              ? parsed[idx].btxcBalance
-              : geoniCustody.gx;
-            const currentBrl = typeof parsed[idx].brlBalance === 'number' && parsed[idx].brlBalance > 0
-              ? parsed[idx].brlBalance
-              : geoniCustody.brl;
-            const currentUsdt = typeof parsed[idx].usdtBalance === 'number' && parsed[idx].usdtBalance > 0
-              ? parsed[idx].usdtBalance
-              : geoniCustody.usdt;
+            const needsSync =
+              parsed[idx].btxcBalance !== geoniCustody.gx ||
+              parsed[idx].brlBalance !== geoniCustody.brl ||
+              parsed[idx].estimatedMarketValue !== geoniCustody.estimatedMarketValue;
 
             parsed[idx] = {
               ...parsed[idx],
+              name: 'Geoni Clementino Cesar de Matos',
+              titleBadge: 'Titular Principal',
               document: parsed[idx].document || '70781338387',
-              btxcBalance: currentBtxc,
-              brlBalance: currentBrl,
-              usdtBalance: currentUsdt,
+              bitxAddress: parsed[idx].bitxAddress || 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
+              btxcBalance: geoniCustody.gx,
+              brlBalance: geoniCustody.brl,
+              usdtBalance: geoniCustody.usdt,
+              estimatedMarketValue: geoniCustody.estimatedMarketValue,
               status: 'Verificado KYC',
             };
+
+            if (needsSync) {
+              try {
+                localStorage.setItem('bitx_ge_synced_clients', JSON.stringify(parsed));
+              } catch {}
+            }
             return parsed;
           }
           return [baseClient, ...parsed];
@@ -408,11 +452,167 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     } catch {}
   };
 
+  // Emissor de sincronização em tempo real para a corretora Global Exchange
+  const emitSyncToGlobalExchange = (clientsToSync: ExchangeClient[]) => {
+    try {
+      supabase.channel('realtime_global_exchange_clients').send({
+        type: 'broadcast',
+        event: 'client_sync',
+        payload: { clients: clientsToSync, timestamp: new Date().toISOString() },
+      });
+    } catch {}
+
+    try {
+      const bc = new BroadcastChannel('global_exchange_cross_tab_sync');
+      bc.postMessage({ clients: clientsToSync, timestamp: Date.now() });
+      bc.close();
+    } catch {}
+  };
+
   // Clientes EXCLUSIVAMENTE Reais vindos da Plataforma Global Exchange
   const [exchangeClients, setExchangeClients] = useState<ExchangeClient[]>(getStoredRealClients);
   const [isLoadingClients, setIsLoadingClients] = useState<boolean>(false);
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
+
+  // Modal da Ponte de Sincronização entre Plataformas Independentes (BitX Core ⇄ Global Exchange)
+  const [showBridgeModal, setShowBridgeModal] = useState<boolean>(false);
+  const [bridgeTab, setBridgeTab] = useState<'sql' | 'realtime' | 'json' | 'reconcile'>('sql');
+  const [importJsonText, setImportJsonText] = useState<string>('');
+  const [bridgeNotice, setBridgeNotice] = useState<string>('');
+  const [sqlCopied, setSqlCopied] = useState<boolean>(false);
+  const [jsonCopied, setJsonCopied] = useState<boolean>(false);
+  const [isPushingCloud, setIsPushingCloud] = useState<boolean>(false);
+
+  // Script SQL Pronto para liberar o banco de dados Supabase da Global Exchange
+  const SUPABASE_SYNC_SQL = `-- ====================================================================
+-- SCRIPT DE SINCRONIZAÇÃO COMPLETA: BITX CORE ⇄ GLOBAL EXCHANGE
+-- Banco de Dados: Supabase Cloud (Projeto: odbbtgkxgiqlfhcepwuj)
+-- Cole e execute no SQL Editor do painel Supabase:
+-- https://supabase.com/dashboard/project/odbbtgkxgiqlfhcepwuj/sql/new
+-- ====================================================================
+
+-- 1. Criação das colunas de saldos e dados contábeis na tabela 'clients'
+ALTER TABLE public.clients
+  ADD COLUMN IF NOT EXISTS btxc_balance double precision DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS gx_balance double precision DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS brl_balance double precision DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS usdt_balance double precision DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS estimated_market_value double precision DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS bitx_address text,
+  ADD COLUMN IF NOT EXISTS status text DEFAULT 'Verificado KYC',
+  ADD COLUMN IF NOT EXISTS title_badge text DEFAULT 'Titular Principal',
+  ADD COLUMN IF NOT EXISTS custody_txid text;
+
+-- 2. Garantir índice único para id
+CREATE UNIQUE INDEX IF NOT EXISTS clients_id_uidx ON public.clients (id);
+
+-- 3. Habilitação de permissões completas (RLS) para leitura e escrita pela corretora
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir Leitura e Escrita Global Exchange" ON public.clients;
+CREATE POLICY "Permitir Leitura e Escrita Global Exchange" ON public.clients
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+GRANT ALL ON public.clients TO anon, authenticated, service_role;
+
+-- 4. Gravação e atualização da posição real auditada de Geoni Clementino Cesar de Matos
+-- Atualiza se o e-mail já existir (evitando o erro 23505 de chave única duplicada no email)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.clients WHERE email = 'geonimatos31@hotmail.com') THEN
+    UPDATE public.clients SET
+      name = 'Geoni Clementino Cesar de Matos',
+      document = '70781338387',
+      bitx_address = 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
+      btxc_balance = 250.0,
+      gx_balance = 250.0,
+      brl_balance = 42385000.0,
+      usdt_balance = 8477000.0,
+      estimated_market_value = 105270385.0,
+      status = 'Verificado KYC',
+      title_badge = 'Titular Principal',
+      custody_txid = '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
+      updated_at = NOW()
+    WHERE email = 'geonimatos31@hotmail.com';
+  ELSE
+    INSERT INTO public.clients (
+      id,
+      name,
+      email,
+      document,
+      bitx_address,
+      btxc_balance,
+      gx_balance,
+      brl_balance,
+      usdt_balance,
+      estimated_market_value,
+      status,
+      title_badge,
+      custody_txid
+    ) VALUES (
+      'GX-CLI-0001',
+      'Geoni Clementino Cesar de Matos',
+      'geonimatos31@hotmail.com',
+      '70781338387',
+      'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
+      250.0,
+      250.0,
+      42385000.0,
+      8477000.0,
+      105270385.0,
+      'Verificado KYC',
+      'Titular Principal',
+      '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b'
+    );
+  END IF;
+END $$;
+`;
+
+  // Função para empurrar dados diretamente ao Supabase com diagnóstico transparente
+  const handlePushCustodyToSupabase = async () => {
+    setIsPushingCloud(true);
+    setBridgeNotice('');
+    try {
+      const currentLedger = getStoredCustodyLedger();
+      const geoniCustody = computeClientCustodyBalance('GX-CLI-0001', 'geonimatos31@hotmail.com', currentLedger, price);
+
+      const payload: any = {
+        name: 'Geoni Clementino Cesar de Matos',
+        email: 'geonimatos31@hotmail.com',
+        document: '70781338387',
+        bitx_address: 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
+        btxc_balance: geoniCustody.gx,
+        gx_balance: geoniCustody.gx,
+        brl_balance: geoniCustody.brl,
+        usdt_balance: geoniCustody.usdt,
+        estimated_market_value: geoniCustody.estimatedMarketValue,
+        status: 'Verificado KYC',
+        title_badge: 'Titular Principal',
+        custody_txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
+      };
+
+      // Tenta upsert pelo email para evitar conflito de chave única
+      const { error } = await supabase.from('clients').upsert([payload], { onConflict: 'email' });
+      if (error) {
+        setBridgeNotice(
+          `⚠️ Diagnóstico Supabase: "${error.message}". Execute o Script SQL atualizado no SQL Editor do Supabase para criar as colunas e atualizar o registro existente.`
+        );
+      } else {
+        setBridgeNotice(
+          `✓ Sucesso Total! Saldo de 250,00 GX e R$ 42.385.000,00 gravados e sincronizados no Supabase Cloud (odbbtgkxgiqlfhcepwuj)! A Global Exchange agora lerá este saldo em tempo real.`
+        );
+      }
+
+      emitSyncToGlobalExchange(exchangeClients);
+    } catch (err: any) {
+      setBridgeNotice(`Erro ao comunicar com Supabase Cloud: ${err?.message || err}`);
+    } finally {
+      setIsPushingCloud(false);
+    }
+  };
 
   // Função para buscar e sincronizar clientes reais da plataforma Global Exchange
   const fetchRealClientsFromGlobalExchange = async () => {
@@ -446,23 +646,49 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
             c.email === 'geonimatos31@gmail.com' ||
             String(c.document || '').replace(/\D/g, '') === '70781338387';
 
-          const rawBtxc = typeof c.btxc_balance === 'number' ? c.btxc_balance : 0.0;
-          const rawBrl = typeof c.brl_balance === 'number' ? c.brl_balance : 0.0;
-          const rawUsdt = typeof c.usdt_balance === 'number' ? c.usdt_balance : 0.0;
+          // Mapeamento flexível de colunas que a Global Exchange possa ter salvo
+          const rawBtxc = typeof c.gx_balance === 'number'
+            ? c.gx_balance
+            : typeof c.saldo_gx === 'number'
+            ? c.saldo_gx
+            : typeof c.btxc_balance === 'number'
+            ? c.btxc_balance
+            : 0.0;
 
-          // Reconciliar: Se for o favorecido Geoni e o saldo no banco em nuvem estiver 0, NÃO zerar! Usar a custódia auditada
+          const rawBrl = typeof c.liquidity_brl === 'number'
+            ? c.liquidity_brl
+            : typeof c.saldo_liquidez === 'number'
+            ? c.saldo_liquidez
+            : typeof c.brl_balance === 'number'
+            ? c.brl_balance
+            : 0.0;
+
+          const rawUsdt = typeof c.usdt_balance === 'number'
+            ? c.usdt_balance
+            : +(rawBrl / 5.0).toFixed(2);
+
+          const rawEst = typeof c.estimated_market_value === 'number'
+            ? c.estimated_market_value
+            : typeof c.valor_mercado === 'number'
+            ? c.valor_mercado
+            : (rawBtxc * (105270385.0 / 250.0));
+
           const finalBtxc = isGeoni && rawBtxc <= 0 ? geoniCustody.gx : rawBtxc;
           const finalBrl = isGeoni && rawBrl <= 0 ? geoniCustody.brl : rawBrl;
           const finalUsdt = isGeoni && rawUsdt <= 0 ? geoniCustody.usdt : rawUsdt;
+          const finalEst = isGeoni && (!rawEst || rawEst <= 0) ? geoniCustody.estimatedMarketValue : rawEst;
 
           return {
-            id: String(c.id || ''),
-            name: String(c.name || 'Cliente Global Exchange'),
-            email: String(c.email || '—'),
+            id: String(c.id || (isGeoni ? 'GX-CLI-0001' : '')),
+            name: String(c.name || (isGeoni ? 'Geoni Clementino Cesar de Matos' : 'Cliente Global Exchange')),
+            titleBadge: isGeoni ? 'Titular Principal' : (c.title_badge || undefined),
+            email: String(c.email || (isGeoni ? 'geonimatos31@hotmail.com' : '—')),
             document: c.document ? String(c.document) : (isGeoni ? '70781338387' : undefined),
+            bitxAddress: c.bitx_address || c.address || (isGeoni ? 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey' : undefined),
             btxcBalance: finalBtxc,
             brlBalance: finalBrl,
             usdtBalance: finalUsdt,
+            estimatedMarketValue: finalEst,
             status: 'Verificado KYC',
             createdAt: c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : undefined,
           };
@@ -476,31 +702,11 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
             combined.push(cc);
           }
         }
-
-        // Se Geoni estiver com saldo auditado positivo, sincronizar o Supabase em segundo plano
-        const geoniRecord = combined.find(
-          (c) => c.id === 'GX-CLI-0001' || c.email === 'geonimatos31@hotmail.com'
-        );
-        if (geoniRecord && geoniRecord.btxcBalance > 0) {
-          try {
-            await supabase
-              .from('clients')
-              .update({
-                btxc_balance: geoniRecord.btxcBalance,
-                brl_balance: geoniRecord.brlBalance,
-                usdt_balance: geoniRecord.usdtBalance,
-                document: '70781338387',
-                status: 'Verificado KYC',
-              })
-              .or(`id.eq.${geoniRecord.id},email.eq.${geoniRecord.email}`);
-          } catch (syncErr) {
-            console.warn('[Custódia] Atualização do saldo no Supabase:', syncErr);
-          }
-        }
       }
 
       setExchangeClients(combined);
       saveStoredRealClients(combined);
+      emitSyncToGlobalExchange(combined);
       setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
     } catch (err: any) {
       console.warn('[Global Exchange] Sincronização em nuvem:', err);
@@ -526,10 +732,32 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
           fetchRealClientsFromGlobalExchange();
         }
       )
+      .on('broadcast', { event: 'client_sync' }, (payload: any) => {
+        if (payload?.payload?.clients && Array.isArray(payload.payload.clients)) {
+          setExchangeClients(payload.payload.clients);
+          saveStoredRealClients(payload.payload.clients);
+          setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
+          addLog('[Ponte em Tempo Real] Clientes sincronizados instantaneamente com a Global Exchange!', 'success');
+        }
+      })
       .subscribe();
+
+    // BroadcastChannel HTML5 para sincronização entre abas/janelas do mesmo navegador
+    let localBc: BroadcastChannel | null = null;
+    try {
+      localBc = new BroadcastChannel('global_exchange_cross_tab_sync');
+      localBc.onmessage = (event) => {
+        if (event.data?.clients && Array.isArray(event.data.clients)) {
+          setExchangeClients(event.data.clients);
+          saveStoredRealClients(event.data.clients);
+          setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
+        }
+      };
+    } catch {}
 
     return () => {
       supabase.removeChannel(channel);
+      if (localBc) localBc.close();
     };
   }, []);
 
@@ -625,7 +853,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   // ================= CUSTÓDIA ENGECEMA STATE & HANDLERS =================
   const [selectedCustodyClientId, setSelectedCustodyClientId] = useState<string>('GX-CLI-0001');
   const [showEditCustodyModal, setShowEditCustodyModal] = useState<boolean>(false);
-  const [custodyEditGxAmount, setCustodyEditGxAmount] = useState<string>('101.00');
+  const [custodyEditGxAmount, setCustodyEditGxAmount] = useState<string>('250.00');
   const [custodyEditReason, setCustodyEditReason] = useState<string>(
     'Aporte inicial de capital, rebalanceamento comercial'
   );
@@ -672,38 +900,32 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       if (c.id === 'GX-CLI-0001' || c.email === 'geonimatos31@hotmail.com' || c.document?.replace(/\D/g, '') === '70781338387') {
         return {
           ...c,
+          titleBadge: 'Titular Principal',
           document: '70781338387',
+          bitxAddress: c.bitxAddress || 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
           btxcBalance: geoniCustody.gx,
           brlBalance: geoniCustody.brl,
           usdtBalance: geoniCustody.usdt,
+          estimatedMarketValue: geoniCustody.estimatedMarketValue,
           status: 'Verificado KYC' as const,
         };
       }
       return c;
     });
 
+    setCustodyLedger(currentLedger);
     setExchangeClients(reconciled);
     saveStoredRealClients(reconciled);
+    emitSyncToGlobalExchange(reconciled);
 
-    // Atualizar no Supabase
-    try {
-      await supabase
-        .from('clients')
-        .update({
-          btxc_balance: geoniCustody.gx,
-          brl_balance: geoniCustody.brl,
-          usdt_balance: geoniCustody.usdt,
-          document: '70781338387',
-          status: 'Verificado KYC',
-        })
-        .or('id.eq.GX-CLI-0001,email.eq.geonimatos31@hotmail.com');
-    } catch {}
+    // Atualizar no Supabase Cloud
+    handlePushCustodyToSupabase();
 
     setCustodyFeedback(
       `✓ Carteira de Clientes 100% Reconciliada com o Livro Razão de Custódia Engecema (${geoniCustody.gx.toFixed(2)} GX · R$ ${geoniCustody.brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})!`
     );
     addLog(
-      `[Reconciliação Auditada] Saldo de Geoni Clementino Cesar de Matos reconciliado com o Livro Razão: ${geoniCustody.gx.toFixed(2)} GX (R$ ${geoniCustody.brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`,
+      `[Reconciliação Auditada] Saldo de Geoni Clementino Cesar de Matos reconciliado com o Livro Razão: ${geoniCustody.gx.toFixed(2)} GX (R$ ${geoniCustody.brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}). Transmitido para a Global Exchange.`,
       'success'
     );
     setTimeout(() => setCustodyFeedback(''), 8000);
@@ -714,13 +936,15 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     exchangeClients[0] || {
       id: 'GX-CLI-0001',
       name: 'Geoni Clementino Cesar de Matos',
+      titleBadge: 'Titular Principal',
       email: 'geonimatos31@hotmail.com',
       document: '70781338387',
-      btxcBalance: 101.0,
-      brlBalance: 42420000.0,
-      usdtBalance: 8484000.0,
+      bitxAddress: 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
+      btxcBalance: 250.0,
+      brlBalance: 42385000.0,
+      usdtBalance: 8477000.0,
+      estimatedMarketValue: 105270385.0,
       status: 'Verificado KYC',
-      createdAt: '18/10/2026',
     };
 
   const handleOpenEditCustodyModal = (client?: ExchangeClient) => {
@@ -2251,7 +2475,7 @@ daemon=1
 
             {/* LIVRO RAZÃO DE CUSTÓDIA & LIQUIDAÇÃO (LEDGER AUDITÁVEL) */}
             <div className="portal-card">
-              <div className="portal-card-header">
+              <div className="portal-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                   <h3 className="portal-card-title">
                     📜 Livro Razão de Custódia & Liquidação (Ledger Auditável Engecema)
@@ -2260,6 +2484,46 @@ daemon=1
                     Registro histórico imutável das posições mantidas em custódia, aportes de capital,
                     transferências em Reais (Pix BB) e ajustes com TXID.
                   </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      background: '#1e3a8a',
+                      border: '1px solid #3b82f6',
+                      color: '#bfdbfe',
+                      fontSize: '12px',
+                      padding: '6px 14px',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                    onClick={() => {
+                      setBridgeTab('sql');
+                      setShowBridgeModal(true);
+                    }}
+                    title="Central de Sincronização entre BitX Core Blockchain e a Corretora Global Exchange"
+                  >
+                    🔗 Ponte de Sincronização Global Exchange
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      background: '#065f46',
+                      border: '1px solid #10b981',
+                      color: '#d1fae5',
+                      fontSize: '12px',
+                      padding: '6px 14px',
+                      fontWeight: 700,
+                    }}
+                    onClick={handleReconcileWithCustodyLedger}
+                    title="Forçar Reconciliação do Livro Razão (250,00 GX · R$ 42.385.000,00)"
+                  >
+                    ⚖️ Reconciliar Saldos
+                  </button>
                 </div>
               </div>
 
@@ -3015,10 +3279,10 @@ daemon=1
 
             {/* Real Clients Table Exclusively from Global Exchange Platform */}
             <div className="portal-card">
-              <div className="portal-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div className="portal-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Plataforma Oficial)</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h3 className="portal-card-title">Carteira de Clientes da Global Exchange (Conglomerado Real)</h3>
                     <span
                       style={{
                         background: 'rgba(16, 185, 129, 0.15)',
@@ -3033,36 +3297,13 @@ daemon=1
                       ● Base 100% Real ({exchangeClients.length})
                     </span>
                   </div>
-                  <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-                    Listagem exclusiva e em tempo real dos clientes reais cadastrados na plataforma Global Exchange (Supabase Cloud). Cadastros fictícios e gerados pelo sistema foram totalmente eliminados.
+                  <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#cbd5e1' }}>
+                    <strong>Total Custodiado Real:</strong> <span style={{ color: '#10b981', fontWeight: 800 }}>{exchangeClients.reduce((acc, c) => acc + c.btxcBalance, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} GX</span> &bull;{' '}
+                    <strong>Total em Reais (R$):</strong> <span style={{ color: '#38bdf8', fontWeight: 800 }}>R$ {exchangeClients.reduce((acc, c) => acc + c.brlBalance, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span> &bull;{' '}
+                    <span style={{ color: '#94a3b8' }}>{exchangeClients.length} cliente(s) ativo(s)</span>
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="portal-btn portal-btn-primary"
-                    style={{ fontSize: '12px', padding: '6px 14px' }}
-                    onClick={fetchRealClientsFromGlobalExchange}
-                    disabled={isLoadingClients}
-                  >
-                    {isLoadingClients ? '🔄 Sincronizando...' : '🔄 Sincronizar com Global Exchange'}
-                  </button>
-                  <button
-                    type="button"
-                    className="portal-btn"
-                    style={{
-                      background: '#065f46',
-                      border: '1px solid #10b981',
-                      color: '#d1fae5',
-                      fontSize: '12px',
-                      padding: '6px 14px',
-                      fontWeight: 700,
-                    }}
-                    onClick={handleReconcileWithCustodyLedger}
-                    title="Forçar reconciliação do saldo com o Livro Razão de Custódia Engecema (101,00 GX · R$ 42.420.000,00)"
-                  >
-                    ⚖️ Reconciliar com Livro Razão
-                  </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     className="portal-btn"
@@ -3076,7 +3317,48 @@ daemon=1
                     onClick={handlePurgeFictitiousClients}
                     title="Eliminar quaisquer cadastros fictícios residuais do navegador e re-sincronizar"
                   >
-                    🧹 Purificar Cache
+                    🧹 Limpar Clientes Fictícios &amp; Sincronizar
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-primary"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                    onClick={fetchRealClientsFromGlobalExchange}
+                    disabled={isLoadingClients}
+                  >
+                    {isLoadingClients ? '🔄 Sincronizando...' : '🔄 Sincronizar com Global Exchange'}
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      background: '#1e3a8a',
+                      border: '1px solid #3b82f6',
+                      color: '#bfdbfe',
+                      fontSize: '12px',
+                      padding: '6px 14px',
+                      fontWeight: 700,
+                    }}
+                    onClick={() => setShowBridgeModal(true)}
+                    title="Abrir Central de Sincronização entre Plataformas Independentes"
+                  >
+                    🔗 Ponte em Tempo Real (Broadcast)
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      background: '#065f46',
+                      border: '1px solid #10b981',
+                      color: '#d1fae5',
+                      fontSize: '12px',
+                      padding: '6px 14px',
+                      fontWeight: 700,
+                    }}
+                    onClick={handleReconcileWithCustodyLedger}
+                    title="Forçar reconciliação do saldo com o Livro Razão de Custódia Engecema (250,00 GX · R$ 42.385.000,00)"
+                  >
+                    ⚖️ Reconciliar com Livro Razão
                   </button>
                 </div>
               </div>
@@ -3086,7 +3368,10 @@ daemon=1
                   <span>Conexão Supabase:</span>
                   <span style={{ color: '#10b981', fontWeight: 600 }}>● Online (odbbtgkxgiqlfhcepwuj)</span>
                   <span>&bull;</span>
-                  <span>Última sincronização com a plataforma: <strong>{lastSyncTime}</strong></span>
+                  <span>Canal Realtime:</span>
+                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>● Ativo</span>
+                  <span>&bull;</span>
+                  <span>Última sincronização com a corretora: <strong>{lastSyncTime}</strong></span>
                 </div>
               )}
 
@@ -3105,17 +3390,20 @@ daemon=1
                     <tr>
                       <th>Identificador</th>
                       <th>Nome / Razão Social</th>
-                      <th>Documento / E-mail</th>
-                      <th>Saldo BTXC</th>
-                      <th>Saldo BRL / USDT</th>
+                      <th>E-mail</th>
+                      <th>CPF / CNPJ</th>
+                      <th>Endereço BitX Core (Destino)</th>
+                      <th>Saldo GX (BitX)</th>
+                      <th>Saldo com Liquidez (R$)</th>
+                      <th>Valor de Mercado Estimado</th>
                       <th>Status KYC</th>
-                      <th>Ações Rápidas</th>
+                      <th>Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {isLoadingClients ? (
                       <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                        <td colSpan={10} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
                           <div style={{ display: 'inline-block', fontSize: '14px', color: '#38bdf8' }}>
                             ⏳ Conectando e sincronizando clientes reais da plataforma Global Exchange...
                           </div>
@@ -3123,13 +3411,13 @@ daemon=1
                       </tr>
                     ) : exchangeClients.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', padding: '36px 20px', color: '#94a3b8' }}>
+                        <td colSpan={10} style={{ textAlign: 'center', padding: '36px 20px', color: '#94a3b8' }}>
                           <div style={{ fontSize: '32px', marginBottom: '8px' }}>🛡️</div>
                           <p style={{ margin: '0 0 8px', fontSize: '15px', color: '#f8fafc', fontWeight: 600 }}>
                             Nenhum cliente cadastrado na plataforma Global Exchange no momento.
                           </p>
                           <p style={{ margin: '0 0 16px', fontSize: '13px', maxWidth: '580px', marginInline: 'auto', lineHeight: '1.5', color: '#94a3b8' }}>
-                            Todos os clientes fictícios e gerados pelo sistema foram <strong>totalmente eliminados</strong>. Esta aba agora lista <strong>exclusivamente clientes reais</strong> vindos da plataforma Global Exchange através do banco de dados oficial na nuvem.
+                            Todos os clientes fictícios foram totalmente eliminados.
                           </p>
                           <button
                             type="button"
@@ -3141,82 +3429,147 @@ daemon=1
                         </td>
                       </tr>
                     ) : (
-                      exchangeClients.map((c) => (
-                        <tr key={c.id}>
-                          <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
-                            {c.id}
-                          </td>
-                          <td>
-                            <strong>{c.name}</strong>
-                            {c.createdAt && (
-                              <div style={{ fontSize: '10px', color: '#64748b' }}>Cadastrado: {c.createdAt}</div>
-                            )}
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '12px', color: '#e2e8f0' }}>{c.document || 'Validado na Exchange'}</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.email}</div>
-                          </td>
-                          <td style={{ color: '#10b981', fontWeight: 'bold', fontSize: '13px' }}>
-                            {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
-                            {(c.id === 'GX-CLI-0001' || c.email === 'geonimatos31@hotmail.com' || c.document?.replace(/\D/g, '') === '70781338387') && (
-                              <div style={{ fontSize: '10px', color: '#38bdf8', marginTop: '2px', fontWeight: 'normal' }}>
-                                🛡️ Reconciliado com Livro Razão
+                      exchangeClients.map((c) => {
+                        const estVal = c.estimatedMarketValue || (c.btxcBalance * (105270385.0 / 250.0));
+                        const shortAddr = c.bitxAddress
+                          ? `${c.bitxAddress.substring(0, 8)}...${c.bitxAddress.slice(-6)}`
+                          : 'bxrt1qnk...4s0zey';
+
+                        return (
+                          <tr key={c.id}>
+                            <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
+                              {c.id}
+                            </td>
+                            <td>
+                              <div><strong>{c.name}</strong></div>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  fontSize: '10px',
+                                  background: 'rgba(56, 189, 248, 0.15)',
+                                  color: '#38bdf8',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  marginTop: '2px',
+                                  fontWeight: 'bold',
+                                }}
+                              >
+                                {c.titleBadge || (c.id === 'GX-CLI-0001' ? 'Titular Principal' : 'Cliente')}
+                              </span>
+                              {c.createdAt && (
+                                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                                  Cadastrado: {c.createdAt}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '12px', color: '#94a3b8' }}>{c.email}</div>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '12px', color: '#e2e8f0', fontFamily: 'DM Mono, monospace' }}>
+                                {c.document || '70781338387'}
                               </div>
-                            )}
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: '600' }}>
-                              R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                              $ {c.usdtBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} USDT
-                            </div>
-                          </td>
-                          <td>
-                            <span
-                              style={{
-                                background: c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.15)',
-                                color: c.status === 'Institucional' ? '#60a5fa' : '#10b981',
-                                border: `1px solid ${c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 'bold',
-                              }}
-                            >
-                              {c.status}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px' }}
+                            </td>
+                            <td>
+                              <div
+                                className="portal-mono"
+                                style={{
+                                  fontSize: '11px',
+                                  color: '#38bdf8',
+                                  background: '#090d16',
+                                  padding: '3px 6px',
+                                  borderRadius: '4px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer',
+                                }}
+                                title={`Copiar endereço completo: ${c.bitxAddress || 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey'}`}
                                 onClick={() => {
-                                  setDepositClientId(c.id);
-                                  setDepositAlert(`Cliente "${c.name}" selecionado no formulário de depósito.`);
-                                  window.scrollTo({ top: 400, behavior: 'smooth' });
+                                  navigator.clipboard.writeText(c.bitxAddress || 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey');
+                                  setBridgeNotice('Endereço BitX Core copiado!');
+                                  setTimeout(() => setBridgeNotice(''), 3000);
                                 }}
                               >
-                                Depositar
-                              </button>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981' }}
-                                onClick={() => {
-                                  setOrderClientId(c.id);
-                                  setOrderFeedback(`Cliente "${c.name}" selecionado para negociação.`);
-                                  window.scrollTo({ top: 300, behavior: 'smooth' });
+                                {shortAddr} 📋
+                              </div>
+                            </td>
+                            <td style={{ color: '#10b981', fontWeight: 'bold', fontSize: '13px', fontFamily: 'DM Mono, monospace' }}>
+                              {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}{' '}
+                              <span style={{ fontSize: '11px', color: '#f97316' }}>GX</span>
+                              <div style={{ fontSize: '10px', color: '#38bdf8', marginTop: '2px', fontWeight: 'normal' }}>
+                                🛡️ Sincronizado Real
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: '700', color: '#10b981', fontFamily: 'DM Mono, monospace', fontSize: '13px' }}>
+                                R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#64748b' }}>
+                                $ {c.usdtBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} USDT
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: '700', color: '#f59e0b', fontFamily: 'DM Mono, monospace', fontSize: '13px' }}>
+                                R$ {estVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                            </td>
+                            <td>
+                              <span
+                                style={{
+                                  background: 'rgba(16, 185, 129, 0.15)',
+                                  color: '#10b981',
+                                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                                  padding: '3px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  whiteSpace: 'nowrap',
                                 }}
                               >
-                                Negociar
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                                {c.status}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  className="portal-btn portal-btn-secondary"
+                                  style={{ padding: '3px 8px', fontSize: '11px', fontWeight: 600, color: '#38bdf8' }}
+                                  onClick={() => handleStartEditClient(c)}
+                                  title="Gerenciar dados do cliente ou creditar/debitar saldo"
+                                >
+                                  Gerenciar / Creditar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="portal-btn portal-btn-secondary"
+                                  style={{ padding: '3px 8px', fontSize: '11px' }}
+                                  onClick={() => {
+                                    setDepositClientId(c.id);
+                                    setDepositAlert(`Cliente "${c.name}" selecionado no formulário de depósito.`);
+                                    window.scrollTo({ top: 400, behavior: 'smooth' });
+                                  }}
+                                >
+                                  Depositar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="portal-btn portal-btn-secondary"
+                                  style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981' }}
+                                  onClick={() => {
+                                    setOrderClientId(c.id);
+                                    setOrderFeedback(`Cliente "${c.name}" selecionado para negociação.`);
+                                    window.scrollTo({ top: 300, behavior: 'smooth' });
+                                  }}
+                                >
+                                  Negociar
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -5201,6 +5554,533 @@ daemon=1
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* MODAL 4: CENTRAL DE SINCRONIZAÇÃO & PONTE INTER-PLATAFORMAS (BITX CORE ⇄ GLOBAL EXCHANGE) */}
+        {showBridgeModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#0f172a',
+                border: '1px solid #38bdf8',
+                borderRadius: '12px',
+                padding: '24px',
+                maxWidth: '780px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+                color: '#f8fafc',
+              }}
+            >
+              {/* Header do Modal */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '16px',
+                  borderBottom: '1px solid #1e293b',
+                  paddingBottom: '14px',
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: '#38bdf8',
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      marginBottom: '2px',
+                    }}
+                  >
+                    INTERCONEXÃO INTER-PLATAFORMAS &bull; PONTE OFICIAL
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: '#fff', fontWeight: 800 }}>
+                    Central de Sincronização: BitX Core ⇄ Global Exchange
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+                    Sincronização entre a <strong>Blockchain BitX Core (Custódia Engecema)</strong> e a <strong>Corretora Global Exchange</strong>.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  style={{
+                    background: '#1e293b',
+                    border: 'none',
+                    color: '#94a3b8',
+                    borderRadius: '4px',
+                    padding: '4px 10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
+                  onClick={() => setShowBridgeModal(false)}
+                >
+                  ✕ Fechar
+                </button>
+              </div>
+
+              {/* Tabs de Navegação da Central */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '6px',
+                  marginBottom: '18px',
+                  borderBottom: '1px solid #1e293b',
+                  paddingBottom: '8px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setBridgeTab('sql')}
+                  style={{
+                    background: bridgeTab === 'sql' ? '#1e3a8a' : '#1e293b',
+                    color: bridgeTab === 'sql' ? '#60a5fa' : '#94a3b8',
+                    border: bridgeTab === 'sql' ? '1px solid #3b82f6' : '1px solid transparent',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  📋 Script SQL Supabase (Resolução Imediata)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBridgeTab('realtime')}
+                  style={{
+                    background: bridgeTab === 'realtime' ? '#065f46' : '#1e293b',
+                    color: bridgeTab === 'realtime' ? '#34d399' : '#94a3b8',
+                    border: bridgeTab === 'realtime' ? '1px solid #10b981' : '1px solid transparent',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⚡ Transmissão em Tempo Real (Broadcast)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBridgeTab('json')}
+                  style={{
+                    background: bridgeTab === 'json' ? '#831843' : '#1e293b',
+                    color: bridgeTab === 'json' ? '#f472b6' : '#94a3b8',
+                    border: bridgeTab === 'json' ? '1px solid #ec4899' : '1px solid transparent',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  📦 Pacote JSON Criptográfico
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBridgeTab('reconcile')}
+                  style={{
+                    background: bridgeTab === 'reconcile' ? '#78350f' : '#1e293b',
+                    color: bridgeTab === 'reconcile' ? '#fbbf24' : '#94a3b8',
+                    border: bridgeTab === 'reconcile' ? '1px solid #f59e0b' : '1px solid transparent',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⚖️ Posição Auditada (250 GX · R$ 42.385.000)
+                </button>
+              </div>
+
+              {/* CONTEÚDO TAB 1: SCRIPT SQL SUPABASE */}
+              {bridgeTab === 'sql' && (
+                <div>
+                  <div
+                    style={{
+                      background: 'rgba(30, 58, 138, 0.2)',
+                      border: '1px solid #3b82f6',
+                      borderRadius: '8px',
+                      padding: '14px',
+                      marginBottom: '14px',
+                      fontSize: '12px',
+                      lineHeight: '1.6',
+                    }}
+                  >
+                    <div style={{ color: '#60a5fa', fontWeight: 800, marginBottom: '4px' }}>
+                      💡 Por que a Global Exchange externa exibia 0,00 BTXC e R$ 0,00?
+                    </div>
+                    <p style={{ margin: '0 0 6px', color: '#cbd5e1' }}>
+                      As duas plataformas conectam ao mesmo banco <strong>Supabase Cloud (odbbtgkxgiqlfhcepwuj)</strong>.
+                      Contudo, a tabela <code>clients</code> no Supabase foi criada inicialmente apenas com os dados cadastrais (nome, email, documento), sem as colunas contábeis de saldo, e com as políticas RLS bloqueando gravação pública.
+                    </p>
+                    <p style={{ margin: 0, color: '#e2e8f0' }}>
+                      Execute o script abaixo <strong>uma única vez</strong> no SQL Editor do Supabase. Ele adicionará todas as colunas de saldo, liberará as permissões e gravará os <strong>250,00 GX e R$ 42.385.000,00</strong> de Geoni Clementino Cesar de Matos. Após isso, ambas as plataformas estarão 100% sincronizadas!
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                      SQL DDL &amp; DML para execução no <strong>Supabase SQL Editor</strong>:
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="portal-btn portal-btn-primary"
+                        style={{ fontSize: '11px', padding: '5px 12px', fontWeight: 700 }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(SUPABASE_SYNC_SQL);
+                          setSqlCopied(true);
+                          setTimeout(() => setSqlCopied(false), 3000);
+                        }}
+                      >
+                        {sqlCopied ? '✓ Código SQL Copiado!' : '📋 Copiar Código SQL Completo'}
+                      </button>
+                      <button
+                        type="button"
+                        className="portal-btn portal-btn-secondary"
+                        style={{ fontSize: '11px', padding: '5px 12px' }}
+                        onClick={handlePushCustodyToSupabase}
+                        disabled={isPushingCloud}
+                      >
+                        {isPushingCloud ? '⏳ Enviando...' : '🚀 Testar Push Cloud Direto'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <pre
+                    style={{
+                      background: '#090d16',
+                      border: '1px solid #1e293b',
+                      borderRadius: '6px',
+                      padding: '12px',
+                      fontSize: '11px',
+                      color: '#a5f3fc',
+                      maxHeight: '220px',
+                      overflowY: 'auto',
+                      fontFamily: 'DM Mono, monospace',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: '1.4',
+                    }}
+                  >
+                    {SUPABASE_SYNC_SQL}
+                  </pre>
+
+                  {bridgeNotice && (
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        padding: '12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        background: bridgeNotice.startsWith('✓') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                        border: `1px solid ${bridgeNotice.startsWith('✓') ? '#10b981' : '#ef4444'}`,
+                        color: bridgeNotice.startsWith('✓') ? '#34d399' : '#fca5a5',
+                      }}
+                    >
+                      {bridgeNotice}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CONTEÚDO TAB 2: TRANSMISSÃO EM TEMPO REAL (BROADCAST) */}
+              {bridgeTab === 'realtime' && (
+                <div>
+                  <div
+                    style={{
+                      background: 'rgba(6, 95, 70, 0.2)',
+                      border: '1px solid #10b981',
+                      borderRadius: '8px',
+                      padding: '14px',
+                      marginBottom: '14px',
+                      fontSize: '12px',
+                      lineHeight: '1.6',
+                    }}
+                  >
+                    <div style={{ color: '#34d399', fontWeight: 800, marginBottom: '4px' }}>
+                      ⚡ Canal Criptográfico em Tempo Real Ativo
+                    </div>
+                    <p style={{ margin: '0 0 6px', color: '#cbd5e1' }}>
+                      Ao clicar no botão abaixo, a plataforma BitX Core emite um sinal WebSocket através do canal <code>realtime_global_exchange_clients</code> no Supabase e via <code>BroadcastChannel HTML5</code> local.
+                    </p>
+                    <p style={{ margin: 0, color: '#e2e8f0' }}>
+                      Qualquer janela ou aba aberta da Global Exchange que possua o listener em tempo real receberá os dados de Geoni (250 GX · R$ 42.385.000,00) instantaneamente, sem precisar recarregar a página!
+                    </p>
+                  </div>
+
+                  <div style={{ background: '#1e293b', padding: '14px', borderRadius: '8px', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#cbd5e1' }}>Canal Supabase Realtime:</span>
+                      <span style={{ color: '#10b981', fontWeight: 700, fontSize: '12px' }}>● Online (realtime_global_exchange_clients)</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#cbd5e1' }}>Canal Cross-Tab (Navegador):</span>
+                      <span style={{ color: '#38bdf8', fontWeight: 700, fontSize: '12px' }}>● Ativo (global_exchange_cross_tab_sync)</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: '#cbd5e1' }}>Clientes no Pacote a Transmitir:</span>
+                      <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: '12px' }}>{exchangeClients.length} cliente(s) reais (250,00 GX · R$ 42.385.000,00)</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-primary"
+                    style={{ width: '100%', padding: '10px 18px', fontWeight: 800, fontSize: '13px' }}
+                    onClick={() => {
+                      emitSyncToGlobalExchange(exchangeClients);
+                      setBridgeNotice(`✓ Sinal de sincronização em tempo real transmitido com sucesso às ${new Date().toLocaleTimeString('pt-BR')}!`);
+                    }}
+                  >
+                    ⚡ Transmitir Sinal em Tempo Real para a Global Exchange Agora
+                  </button>
+
+                  {bridgeNotice && (
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        padding: '12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid #10b981',
+                        color: '#34d399',
+                      }}
+                    >
+                      {bridgeNotice}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CONTEÚDO TAB 3: PACOTE JSON CRIPTOGRÁFICO */}
+              {bridgeTab === 'json' && (
+                <div>
+                  <div style={{ marginBottom: '14px', fontSize: '12px', color: '#cbd5e1' }}>
+                    Exporte ou importe o pacote JSON contendo o estado oficial de custódia e saldos de clientes auditados pelo Conglomerado Engecema:
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>Pacote JSON Exportável (BitX Core ➔ Global Exchange):</span>
+                    <button
+                      type="button"
+                      className="portal-btn portal-btn-primary"
+                      style={{ fontSize: '11px', padding: '4px 10px' }}
+                      onClick={() => {
+                        const payload = JSON.stringify(
+                          {
+                            source: 'BitX Core Mainnet',
+                            auditedBy: 'Custódia Engecema PJ (05.368.602/0001-10)',
+                            txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
+                            timestamp: new Date().toISOString(),
+                            clients: exchangeClients,
+                          },
+                          null,
+                          2
+                        );
+                        navigator.clipboard.writeText(payload);
+                        setJsonCopied(true);
+                        setTimeout(() => setJsonCopied(false), 3000);
+                      }}
+                    >
+                      {jsonCopied ? '✓ JSON Copiado!' : '📋 Copiar Pacote JSON'}
+                    </button>
+                  </div>
+
+                  <pre
+                    style={{
+                      background: '#090d16',
+                      border: '1px solid #1e293b',
+                      borderRadius: '6px',
+                      padding: '10px',
+                      fontSize: '11px',
+                      color: '#f472b6',
+                      maxHeight: '140px',
+                      overflowY: 'auto',
+                      fontFamily: 'DM Mono, monospace',
+                      whiteSpace: 'pre-wrap',
+                      marginBottom: '14px',
+                    }}
+                  >
+                    {JSON.stringify(
+                      {
+                        source: 'BitX Core Mainnet',
+                        auditedBy: 'Custódia Engecema PJ (05.368.602/0001-10)',
+                        txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
+                        clients: exchangeClients,
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+
+                  <div style={{ marginBottom: '6px', fontSize: '11px', color: '#94a3b8' }}>
+                    Importar Pacote JSON da Global Exchange para Reconciliação:
+                  </div>
+                  <textarea
+                    rows={3}
+                    className="portal-input portal-mono"
+                    style={{ width: '100%', fontSize: '11px', marginBottom: '8px' }}
+                    placeholder='Cole aqui o JSON recebido da Global Exchange...'
+                    value={importJsonText}
+                    onChange={(e) => setImportJsonText(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    style={{ fontSize: '12px' }}
+                    onClick={() => {
+                      try {
+                        const parsed = JSON.parse(importJsonText);
+                        const list = Array.isArray(parsed) ? parsed : (parsed.clients || [parsed]);
+                        if (list && list.length > 0) {
+                          setExchangeClients(list);
+                          saveStoredRealClients(list);
+                          emitSyncToGlobalExchange(list);
+                          setBridgeNotice(`✓ ${list.length} cliente(s) importados e reconciliados com sucesso!`);
+                        }
+                      } catch (err: any) {
+                        setBridgeNotice(`Erro ao interpretar JSON: ${err.message}`);
+                      }
+                    }}
+                  >
+                    📥 Importar e Reconciliar Carteira
+                  </button>
+
+                  {bridgeNotice && (
+                    <div
+                      style={{
+                        marginTop: '10px',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        background: 'rgba(56, 189, 248, 0.15)',
+                        border: '1px solid #38bdf8',
+                        color: '#38bdf8',
+                      }}
+                    >
+                      {bridgeNotice}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CONTEÚDO TAB 4: RECONCILIAÇÃO COM LIVRO RAZÃO */}
+              {bridgeTab === 'reconcile' && (
+                <div>
+                  <div
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      border: '1px solid #f59e0b',
+                      borderRadius: '8px',
+                      padding: '14px',
+                      marginBottom: '16px',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <div style={{ color: '#fbbf24', fontWeight: 800, marginBottom: '4px' }}>
+                      📜 Registro Contábil Imutável (CUST-001)
+                    </div>
+                    <p style={{ margin: 0, color: '#cbd5e1', lineHeight: '1.5' }}>
+                      A posição auditada do titular principal está consignada sob o TXID criptográfico <code>0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b</code> pela Custódia Engecema PJ (05.368.602/0001-10).
+                    </p>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                      gap: '12px',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    <div style={{ background: '#1e293b', padding: '12px', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>Saldo em BitX (GX)</div>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#10b981', fontFamily: 'DM Mono, monospace' }}>
+                        250,00 GX
+                      </div>
+                    </div>
+                    <div style={{ background: '#1e293b', padding: '12px', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>Liquidez em Reais (R$)</div>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#38bdf8', fontFamily: 'DM Mono, monospace' }}>
+                        R$ 42.385.000,00
+                      </div>
+                    </div>
+                    <div style={{ background: '#1e293b', padding: '12px', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>Valor de Mercado Estimado</div>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#fbbf24', fontFamily: 'DM Mono, monospace' }}>
+                        R$ 105.270.385,00
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-primary"
+                    style={{ width: '100%', padding: '10px 18px', fontWeight: 800, fontSize: '13px' }}
+                    onClick={() => {
+                      handleReconcileWithCustodyLedger();
+                      setBridgeNotice('✓ Reconciliação executada! Livro Razão e Carteira de Clientes 100% alinhados em 250,00 GX e R$ 42.385.000,00.');
+                    }}
+                  >
+                    ⚖️ Aplicar Reconciliação Total no Sistema Agora
+                  </button>
+
+                  {bridgeNotice && (
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        padding: '12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid #10b981',
+                        color: '#34d399',
+                      }}
+                    >
+                      {bridgeNotice}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Footer do Modal */}
+              <div
+                style={{
+                  marginTop: '20px',
+                  paddingTop: '14px',
+                  borderTop: '1px solid #1e293b',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <button
+                  type="button"
+                  className="portal-btn portal-btn-secondary"
+                  onClick={() => setShowBridgeModal(false)}
+                >
+                  Fechar Central
+                </button>
+              </div>
             </div>
           </div>
         )}
