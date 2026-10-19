@@ -78,6 +78,77 @@ export interface CustodyLedgerItem {
   status: 'Confirmado em Custódia' | 'Liquidado Pix BB';
 }
 
+export interface OperatorUser {
+  id: string;
+  name: string;
+  username: string; // geonimatos31@gmail.com
+  email: string;
+  role: 'Super Admin' | 'Operador' | 'Auditor';
+  status: 'Ativo' | 'Inativo';
+  createdAt: string;
+}
+
+const STORAGE_OPERATORS_KEY = 'bitx_ge_admin_operators_v3';
+
+export const DEFAULT_REAL_OPERATORS: OperatorUser[] = [
+  {
+    id: 'GX-OP-0001',
+    name: 'Geoni Clementino Cesar de Matos',
+    username: 'geonimatos31@gmail.com',
+    email: 'geonimatos31@gmail.com',
+    role: 'Super Admin',
+    status: 'Ativo',
+    createdAt: '19/10/2026',
+  },
+];
+
+export const getStoredOperators = (): OperatorUser[] => {
+  try {
+    // Purificar chaves legadas e antigas do cache para não ressuscitar dados falsos
+    localStorage.removeItem('bitx_admin_users');
+    localStorage.removeItem('bitx_operators');
+    localStorage.removeItem('bitx_ge_admin_operators');
+    localStorage.removeItem('bitx_ge_admin_operators_v2');
+
+    const raw = localStorage.getItem(STORAGE_OPERATORS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Remover expressamente qualquer operador fictício antigo
+        const filtered = parsed.filter(
+          (u: any) =>
+            u.username !== 'admin_engecema' &&
+            u.username !== 'global_exchange_gateway' &&
+            u.username !== 'auditor_compliance' &&
+            u.username !== 'pool_operator_01'
+        );
+        if (filtered.length > 0) {
+          return filtered.map((u: any, idx: number) => ({
+            id: u.id || `GX-OP-${String(idx + 1).padStart(4, '0')}`,
+            name: u.name || (u.username === 'geonimatos31@gmail.com' ? 'Geoni Clementino Cesar de Matos' : u.username),
+            username: u.username || u.email || 'operador',
+            email: u.email || u.username || 'operador@globalexchange.com',
+            role: (u.role || 'Operador') as 'Super Admin' | 'Operador' | 'Auditor',
+            status: (u.status || 'Ativo') as 'Ativo' | 'Inativo',
+            createdAt: u.createdAt || '19/10/2026',
+          }));
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Operadores] Leitura do armazenamento local:', e);
+  }
+  return DEFAULT_REAL_OPERATORS;
+};
+
+export const saveStoredOperators = (ops: OperatorUser[]) => {
+  try {
+    localStorage.setItem(STORAGE_OPERATORS_KEY, JSON.stringify(ops));
+  } catch (e) {
+    console.warn('[Operadores] Gravação no armazenamento local:', e);
+  }
+};
+
 export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy }) => {
   const [activeTab, setActiveTab] = useState<
     'custody' | 'mining' | 'exchange' | 'config' | 'explorer' | 'mempool' | 'wallet'
@@ -314,6 +385,23 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
 
     return () => {
       supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Listener em tempo real para sincronização de operadores entre instâncias da plataforma
+  useEffect(() => {
+    const opChannel = supabase
+      .channel('realtime_global_exchange_operators')
+      .on('broadcast', { event: 'operator_update' }, (payload: any) => {
+        if (payload?.payload?.operators && Array.isArray(payload.payload.operators)) {
+          setUsers(payload.payload.operators);
+          saveStoredOperators(payload.payload.operators);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(opChannel);
     };
   }, []);
 
@@ -809,17 +897,32 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     setTimeout(() => setClientFormFeedback(''), 6000);
   };
 
-  // Users state
-  const [users, setUsers] = useState<
-    { username: string; role: 'Super Admin' | 'Operador' | 'Auditor' }[]
-  >([
-    { username: 'admin_engecema', role: 'Super Admin' },
-    { username: 'global_exchange_gateway', role: 'Operador' },
-    { username: 'auditor_compliance', role: 'Auditor' },
-    { username: 'pool_operator_01', role: 'Operador' },
-  ]);
+  // Users state - Operadores Administrativos com persistência no LocalStorage e sincronização em tempo real
+  const [users, setUsers] = useState<OperatorUser[]>(getStoredOperators);
   const [newUsername, setNewUsername] = useState('');
-  const [newRole, setNewRole] = useState<'Operador' | 'Auditor'>('Operador');
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState<'Super Admin' | 'Operador' | 'Auditor'>('Operador');
+  const [editingOperator, setEditingOperator] = useState<OperatorUser | null>(null);
+  const [operatorFeedback, setOperatorFeedback] = useState<string>('');
+
+  const updateOperatorsAndPersist = (updated: OperatorUser[], message?: string) => {
+    setUsers(updated);
+    saveStoredOperators(updated);
+    if (message) {
+      setOperatorFeedback(message);
+      setTimeout(() => setOperatorFeedback(''), 5000);
+    }
+  };
+
+  const notifyCloudOperators = (ops: OperatorUser[]) => {
+    try {
+      supabase.channel('realtime_global_exchange_operators').send({
+        type: 'broadcast',
+        event: 'operator_update',
+        payload: { operators: ops },
+      });
+    } catch {}
+  };
 
   // Live market price ticker (Cotação de Referência Oficial R$ 420.000,00)
   const [price, setPrice] = useState(420000.0);
@@ -3044,91 +3147,356 @@ daemon=1
 
               {/* User access control */}
               <div style={{ marginTop: '36px', borderTop: '1px solid #1f2937', paddingTop: '24px' }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#f8fafc' }}>
-                  Acessos Administrativos & Operadores da Corretora
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <h3 style={{ margin: 0, fontSize: '16px', color: '#f8fafc', fontWeight: 'bold' }}>
+                        👤 Acessos Administrativos & Operadores da Corretora
+                      </h3>
+                      <span
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          border: '1px solid #10b981',
+                          color: '#10b981',
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        ● Sincronizado e Persistente (Local & Nuvem)
+                      </span>
+                    </div>
+                    <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                      Gerencie os operadores com permissão de custódia, auditoria e controle de nós na plataforma Global Exchange. Todas as alterações são salvas e sincronizadas instantaneamente.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="portal-btn portal-btn-secondary"
+                    style={{ fontSize: '12px', padding: '6px 12px', borderColor: '#334155', color: '#94a3b8' }}
+                    onClick={() => {
+                      if (window.confirm('Deseja purificar o cache e manter exclusivamente o operador oficial (geonimatos31@gmail.com)?')) {
+                        updateOperatorsAndPersist(DEFAULT_REAL_OPERATORS, '🧹 Lista de operadores restaurada com sucesso: apenas geonimatos31@gmail.com!');
+                        notifyCloudOperators(DEFAULT_REAL_OPERATORS);
+                        addLog('[Acessos] Lista purificada mantendo apenas operador oficial geonimatos31@gmail.com.', 'success');
+                      }
+                    }}
+                    title="Restaura a lista mantendo unicamente geonimatos31@gmail.com"
+                  >
+                    🔄 Purificar / Manter Somente Operador Oficial
+                  </button>
+                </div>
+
+                {operatorFeedback && (
+                  <div
+                    style={{
+                      background: 'rgba(16, 185, 129, 0.12)',
+                      border: '1px solid #10b981',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      marginBottom: '16px',
+                      color: '#a7f3d0',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span>✓</span>
+                    <span>{operatorFeedback}</span>
+                  </div>
+                )}
+
+                {/* Table of operators */}
                 <div className="portal-table-container" style={{ marginBottom: '16px' }}>
                   <table className="portal-table">
                     <thead>
                       <tr>
-                        <th>Usuário / Serviço</th>
+                        <th>Nome / Identificador</th>
+                        <th>Email / Usuário</th>
                         <th>Perfil de Acesso</th>
                         <th>Status</th>
-                        <th>Ações</th>
+                        <th>Data de Cadastro</th>
+                        <th style={{ textAlign: 'right' }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map((u) => (
-                        <tr key={u.username}>
-                          <td style={{ fontWeight: 'bold' }}>{u.username}</td>
-                          <td>
-                            <span
-                              style={{
-                                background: u.role === 'Super Admin' ? '#f97316' : '#1e293b',
-                                color: '#fff',
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                              }}
-                            >
-                              {u.role}
-                            </span>
-                          </td>
-                          <td style={{ color: '#10b981' }}>Ativo</td>
-                          <td>
-                            {u.username.includes('admin') ? (
-                              <span style={{ color: '#64748b', fontSize: '11px' }}>
-                                Principal (Protegido)
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#ef4444' }}
-                                onClick={() =>
-                                  setUsers(users.filter((item) => item.username !== u.username))
-                                }
-                              >
-                                Remover
-                              </button>
-                            )}
+                      {users.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                            Nenhum operador cadastrado no momento.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        users.map((u) => {
+                          const isSuper = u.role === 'Super Admin';
+                          const isAuditor = u.role === 'Auditor';
+                          return (
+                            <tr key={u.id || u.username}>
+                              <td style={{ fontWeight: 'bold', color: '#f8fafc' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '14px' }}>{isSuper ? '👑' : isAuditor ? '🔍' : '⚙️'}</span>
+                                  <span>{u.name || u.username}</span>
+                                </div>
+                              </td>
+                              <td style={{ fontFamily: 'monospace', color: '#38bdf8' }}>
+                                {u.email || u.username}
+                              </td>
+                              <td>
+                                <span
+                                  style={{
+                                    background: isSuper ? '#f97316' : isAuditor ? '#8b5cf6' : '#2563eb',
+                                    color: '#fff',
+                                    padding: '3px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: 'bold',
+                                  }}
+                                >
+                                  {u.role}
+                                </span>
+                              </td>
+                              <td>
+                                <span
+                                  style={{
+                                    color: u.status === 'Ativo' ? '#10b981' : '#94a3b8',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    fontSize: '12px',
+                                    fontWeight: '500',
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: '7px',
+                                      height: '7px',
+                                      borderRadius: '50%',
+                                      background: u.status === 'Ativo' ? '#10b981' : '#64748b',
+                                      display: 'inline-block',
+                                    }}
+                                  />
+                                  {u.status || 'Ativo'}
+                                </span>
+                              </td>
+                              <td style={{ color: '#94a3b8', fontSize: '12px' }}>
+                                {u.createdAt || '19/10/2026'}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <div style={{ display: 'inline-flex', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="portal-btn portal-btn-secondary"
+                                    style={{ padding: '3px 10px', fontSize: '11px', color: '#38bdf8', borderColor: '#0284c7' }}
+                                    onClick={() => setEditingOperator({ ...u })}
+                                  >
+                                    ✏️ Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="portal-btn portal-btn-secondary"
+                                    style={{ padding: '3px 10px', fontSize: '11px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                                    onClick={() => {
+                                      if (users.length === 1 && !window.confirm(`Você está removendo o único operador cadastrado (${u.username}). Tem certeza?`)) {
+                                        return;
+                                      }
+                                      const remaining = users.filter((item) => item.username !== u.username && item.id !== u.id);
+                                      updateOperatorsAndPersist(remaining, `Operador ${u.username} removido com sucesso.`);
+                                      notifyCloudOperators(remaining);
+                                      addLog(`[Acessos] Operador ${u.username} removido da lista de acessos administrativos.`, 'warning');
+                                    }}
+                                  >
+                                    🗑️ Remover
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
 
-                {/* Add User Form */}
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  <input
-                    type="text"
-                    className="portal-input"
-                    placeholder="Novo nome de usuário / serviço"
-                    style={{ maxWidth: '260px' }}
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                  />
-                  <select
-                    className="portal-input"
-                    style={{ maxWidth: '180px' }}
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as any)}
-                  >
-                    <option value="Operador">Operador da Corretora</option>
-                    <option value="Auditor">Auditor de Compliance</option>
-                  </select>
-                  <button
-                    type="button"
-                    className="portal-btn portal-btn-secondary"
-                    onClick={() => {
-                      if (!newUsername.trim()) return;
-                      setUsers([...users, { username: newUsername.trim(), role: newRole }]);
-                      setNewUsername('');
+                {/* Inline Editing Drawer when an operator is being edited */}
+                {editingOperator && (
+                  <div
+                    style={{
+                      background: '#131d31',
+                      border: '1px solid #3b82f6',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      marginBottom: '20px',
                     }}
                   >
-                    Adicionar Acesso
-                  </button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '14px' }}>
+                        ✏️ Editando Operador: {editingOperator.username}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditingOperator(null)}
+                        style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '16px' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                          Nome Completo / Identificador
+                        </label>
+                        <input
+                          type="text"
+                          className="portal-input"
+                          value={editingOperator.name}
+                          onChange={(e) => setEditingOperator({ ...editingOperator, name: e.target.value })}
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                          Email / Usuário
+                        </label>
+                        <input
+                          type="email"
+                          className="portal-input"
+                          value={editingOperator.email}
+                          onChange={(e) =>
+                            setEditingOperator({
+                              ...editingOperator,
+                              email: e.target.value,
+                              username: e.target.value,
+                            })
+                          }
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                          Perfil de Acesso
+                        </label>
+                        <select
+                          className="portal-input"
+                          value={editingOperator.role}
+                          onChange={(e) => setEditingOperator({ ...editingOperator, role: e.target.value as any })}
+                          style={{ width: '100%' }}
+                        >
+                          <option value="Super Admin">Super Admin</option>
+                          <option value="Operador">Operador da Corretora</option>
+                          <option value="Auditor">Auditor de Compliance</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                          Status
+                        </label>
+                        <select
+                          className="portal-input"
+                          value={editingOperator.status}
+                          onChange={(e) => setEditingOperator({ ...editingOperator, status: e.target.value as any })}
+                          style={{ width: '100%' }}
+                        >
+                          <option value="Ativo">Ativo</option>
+                          <option value="Inativo">Inativo</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        type="button"
+                        className="portal-btn portal-btn-primary"
+                        onClick={() => {
+                          if (!editingOperator.username.trim()) return;
+                          const updated = users.map((op) =>
+                            op.id === editingOperator.id || op.username === editingOperator.username
+                              ? editingOperator
+                              : op
+                          );
+                          updateOperatorsAndPersist(updated, `Operador ${editingOperator.username} atualizado com sucesso!`);
+                          notifyCloudOperators(updated);
+                          addLog(`[Acessos] Operador ${editingOperator.username} atualizado com sucesso.`, 'info');
+                          setEditingOperator(null);
+                        }}
+                      >
+                        ✓ Salvar Alterações
+                      </button>
+                      <button
+                        type="button"
+                        className="portal-btn portal-btn-secondary"
+                        onClick={() => setEditingOperator(null)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Add User Form */}
+                <div style={{ background: '#0e1726', padding: '16px', borderRadius: '8px', border: '1px solid #1e293b' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#f8fafc', marginBottom: '10px' }}>
+                    ➕ Cadastrar Novo Operador da Corretora:
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="portal-input"
+                      placeholder="Nome do operador (ex: Geoni Matos)"
+                      style={{ maxWidth: '240px', flex: '1 1 200px' }}
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="portal-input"
+                      placeholder="Email ou usuário (ex: novo@globalexchange.com)"
+                      style={{ maxWidth: '300px', flex: '1 1 240px' }}
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                    />
+                    <select
+                      className="portal-input"
+                      style={{ maxWidth: '200px', flex: '1 1 180px' }}
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value as any)}
+                    >
+                      <option value="Super Admin">Super Admin</option>
+                      <option value="Operador">Operador da Corretora</option>
+                      <option value="Auditor">Auditor de Compliance</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="portal-btn portal-btn-primary"
+                      onClick={() => {
+                        const targetUser = newUsername.trim();
+                        if (!targetUser) return;
+                        if (users.some((x) => x.username.toLowerCase() === targetUser.toLowerCase() || x.email.toLowerCase() === targetUser.toLowerCase())) {
+                          alert('Este operador ou email já está cadastrado na lista.');
+                          return;
+                        }
+                        const newOp: OperatorUser = {
+                          id: `GX-OP-${Date.now().toString(36).toUpperCase()}`,
+                          name: newName.trim() || targetUser,
+                          username: targetUser,
+                          email: targetUser,
+                          role: newRole,
+                          status: 'Ativo',
+                          createdAt: new Date().toLocaleDateString('pt-BR'),
+                        };
+                        const updated = [...users, newOp];
+                        updateOperatorsAndPersist(updated, `Novo operador ${newOp.username} adicionado e sincronizado com sucesso!`);
+                        notifyCloudOperators(updated);
+                        addLog(`[Acessos] Novo operador adicionado: ${newOp.username} (${newOp.role}).`, 'success');
+                        setNewUsername('');
+                        setNewName('');
+                      }}
+                    >
+                      Adicionar Acesso & Sincronizar
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

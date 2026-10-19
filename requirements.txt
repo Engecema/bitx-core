@@ -1,1 +1,0 @@
-# BitX Core - Render Dependencies (uses Python standard library)
