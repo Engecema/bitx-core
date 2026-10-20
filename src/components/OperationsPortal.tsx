@@ -73,7 +73,14 @@ export interface OrderBookEntry {
 export interface CustodyLedgerItem {
   id: string;
   txid: string;
-  type: 'Aporte Inicial' | 'Ajuste Direto com TXID' | 'Transferência em Reais (Pix)' | 'Transferência em GX';
+  clientId?: string;
+  type:
+    | 'Aporte Inicial'
+    | 'Ajuste Direto com TXID'
+    | 'Transferência em Reais (Pix)'
+    | 'Transferência em GX'
+    | 'Depósito Blockchain BitX Core'
+    | 'Sincronização Corretora';
   amountGx: number;
   amountBrl: number;
   counterparty: string;
@@ -152,61 +159,17 @@ export const saveStoredOperators = (ops: OperatorUser[]) => {
   }
 };
 
-export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [
-  {
-    id: 'CUST-001',
-    txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
-    type: 'Aporte Inicial',
-    amountGx: 250.0,
-    amountBrl: 42385000.0,
-    counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
-    timestamp: '18/10/2026 06:47:01',
-    status: 'Confirmado em Custódia',
-  },
-];
+export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [];
 
 export const getStoredCustodyLedger = (): CustodyLedgerItem[] => {
   try {
     const saved = localStorage.getItem('bitx_custody_ledger');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        let needsSave = false;
-        // Garantir que CUST-001 seja estritamente 250.0 GX e R$ 42.385.000,00 (eliminando o valor legado de 101 GX / R$ 42.420.000,00)
-        const updated = parsed.map((item: any) => {
-          if (item.id === 'CUST-001') {
-            const gx = Number(item.amountGx);
-            const brl = Number(item.amountBrl);
-            if (gx !== 250.0 || brl !== 42385000.0) {
-              needsSave = true;
-              return {
-                ...item,
-                amountGx: 250.0,
-                amountBrl: 42385000.0,
-                counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
-                status: 'Confirmado em Custódia',
-              };
-            }
-          }
-          return item;
-        });
-
-        if (!updated.some((r: any) => r.id === 'CUST-001')) {
-          updated.unshift(DEFAULT_CUSTODY_LEDGER[0]);
-          needsSave = true;
-        }
-
-        if (needsSave) {
-          try {
-            localStorage.setItem('bitx_custody_ledger', JSON.stringify(updated));
-          } catch {}
-        }
-        return updated;
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
     }
-  } catch {}
-  try {
-    localStorage.setItem('bitx_custody_ledger', JSON.stringify(DEFAULT_CUSTODY_LEDGER));
   } catch {}
   return DEFAULT_CUSTODY_LEDGER;
 };
@@ -221,37 +184,56 @@ export const computeClientCustodyBalance = (
   clientId: string,
   clientEmail: string,
   ledger: CustodyLedgerItem[],
-  refPrice: number = 420000.0
+  refPrice: number = 420000.0,
+  clientName?: string
 ): { gx: number; brl: number; usdt: number; estimatedMarketValue: number } => {
-  const isGeoni =
-    clientId === 'GX-CLI-0001' ||
-    clientEmail === 'geonimatos31@hotmail.com' ||
-    clientEmail === 'geonimatos31@gmail.com';
-
-  if (!isGeoni) {
+  if (!clientId && !clientEmail && !clientName) {
     return { gx: 0, brl: 0, usdt: 0, estimatedMarketValue: 0 };
   }
 
-  let netGx = 0;
-  for (const item of ledger) {
-    const isBeneficiary =
-      item.id === 'CUST-001' ||
-      item.counterparty.toLowerCase().includes('geoni') ||
-      item.counterparty.toLowerCase().includes('custódia engecema') ||
-      item.counterparty.toLowerCase().includes('pix bb engecema') ||
-      item.counterparty.toLowerCase().includes('ajuste direto');
+  const idLower = (clientId || '').toLowerCase();
+  const emailLower = (clientEmail || '').toLowerCase();
+  const nameLower = (clientName || '').toLowerCase();
 
-    if (isBeneficiary) {
+  let netGx = 0;
+  let hasEntries = false;
+
+  for (const item of ledger) {
+    const cpLower = (item.counterparty || '').toLowerCase();
+    const itemClientId = (item as any).clientId?.toLowerCase();
+
+    const matchesClient =
+      (itemClientId && itemClientId === idLower) ||
+      (idLower && cpLower.includes(idLower)) ||
+      (emailLower && cpLower.includes(emailLower)) ||
+      (nameLower && cpLower.includes(nameLower));
+
+    if (matchesClient) {
       netGx += item.amountGx;
+      hasEntries = true;
     }
   }
 
-  const safeGx = Math.max(0, Number.isFinite(netGx) ? netGx : 250.0);
-  const safeBrl = safeGx === 250.0 ? 42385000.0 : safeGx * refPrice;
-  const safeUsdt = +(safeBrl / 5.0).toFixed(2);
-  const estimatedMarketValue = safeGx === 250.0 ? 105270385.0 : safeGx * (105270385.0 / 250.0);
+  // Se o cliente for Geoni e existir lançamento histórico CUST-001
+  if (!hasEntries && (idLower === 'gx-cli-0001' || emailLower.includes('geoni'))) {
+    const cust001 = ledger.find((i) => i.id === 'CUST-001');
+    if (cust001) {
+      netGx = cust001.amountGx;
+      hasEntries = true;
+    }
+  }
 
-  return { gx: +safeGx.toFixed(4), brl: +safeBrl.toFixed(2), usdt: safeUsdt, estimatedMarketValue: +estimatedMarketValue.toFixed(2) };
+  const safeGx = Math.max(0, Number.isFinite(netGx) ? netGx : 0);
+  const safeBrl = safeGx * refPrice;
+  const safeUsdt = +(safeBrl / 5.0).toFixed(2);
+  const estimatedMarketValue = safeGx * (105270385.0 / 250.0);
+
+  return {
+    gx: +safeGx.toFixed(4),
+    brl: +safeBrl.toFixed(2),
+    usdt: safeUsdt,
+    estimatedMarketValue: +estimatedMarketValue.toFixed(2),
+  };
 };
 
 export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy }) => {
@@ -369,81 +351,41 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   // Global Exchange State & Sincronização Exclusiva de Clientes Reais
   const [selectedPair, setSelectedPair] = useState<'BTXC/BRL' | 'BTXC/USDT' | 'BTXC/BTC'>('BTXC/BRL');
   
-  // Cadastro Real Oficial Confirmado da Global Exchange (Conglomerado Real)
-  const DEFAULT_REAL_CLIENTS: ExchangeClient[] = [
-    {
-      id: 'GX-CLI-0001',
-      name: 'Geoni Clementino Cesar de Matos',
-      titleBadge: 'Titular Principal',
-      email: 'geonimatos31@hotmail.com',
-      document: '70781338387',
-      bitxAddress: 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
-      btxcBalance: 250.0,
-      brlBalance: 42385000.0,
-      usdtBalance: 8477000.0,
-      estimatedMarketValue: 105270385.0,
-      status: 'Verificado KYC',
-      createdAt: '18/10/2026',
-    },
-  ];
+  // Cadastro de Clientes da Global Exchange (iniciado zerado conforme solicitado)
+  const DEFAULT_REAL_CLIENTS: ExchangeClient[] = [];
 
   // Helper de persistência e sincronização de clientes reais com o Livro Razão de Custódia Engecema
   const getStoredRealClients = (): ExchangeClient[] => {
-    const ledger = getStoredCustodyLedger();
-    const geoniCustody = computeClientCustodyBalance('GX-CLI-0001', 'geonimatos31@hotmail.com', ledger, 420000.0);
-
-    const baseClient: ExchangeClient = {
-      id: 'GX-CLI-0001',
-      name: 'Geoni Clementino Cesar de Matos',
-      titleBadge: 'Titular Principal',
-      email: 'geonimatos31@hotmail.com',
-      document: '70781338387',
-      bitxAddress: 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
-      btxcBalance: geoniCustody.gx,
-      brlBalance: geoniCustody.brl,
-      usdtBalance: geoniCustody.usdt,
-      estimatedMarketValue: geoniCustody.estimatedMarketValue,
-      status: 'Verificado KYC',
-      createdAt: '18/10/2026',
-    };
-
     try {
       const stored = localStorage.getItem('bitx_ge_synced_clients');
-      if (stored) {
+      if (stored !== null) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const idx = parsed.findIndex((c: any) => c.id === 'GX-CLI-0001' || c.email === 'geonimatos31@hotmail.com');
-          if (idx >= 0) {
-            const needsSync =
-              parsed[idx].btxcBalance !== geoniCustody.gx ||
-              parsed[idx].brlBalance !== geoniCustody.brl ||
-              parsed[idx].estimatedMarketValue !== geoniCustody.estimatedMarketValue;
-
-            parsed[idx] = {
-              ...parsed[idx],
-              name: 'Geoni Clementino Cesar de Matos',
-              titleBadge: 'Titular Principal',
-              document: parsed[idx].document || '70781338387',
-              bitxAddress: parsed[idx].bitxAddress || 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
-              btxcBalance: geoniCustody.gx,
-              brlBalance: geoniCustody.brl,
-              usdtBalance: geoniCustody.usdt,
-              estimatedMarketValue: geoniCustody.estimatedMarketValue,
-              status: 'Verificado KYC',
-            };
-
-            if (needsSync) {
-              try {
-                localStorage.setItem('bitx_ge_synced_clients', JSON.stringify(parsed));
-              } catch {}
+        if (Array.isArray(parsed)) {
+          const ledger = getStoredCustodyLedger();
+          // Sincronizar dinamicamente os saldos de cada cliente cadastrado com o Livro Razão se houver registros
+          return parsed.map((client: ExchangeClient) => {
+            const hasLedgerEntry = ledger.some(
+              (item) =>
+                (item as any).clientId === client.id ||
+                item.counterparty.toLowerCase().includes(client.id.toLowerCase()) ||
+                item.counterparty.toLowerCase().includes(client.email.toLowerCase())
+            );
+            if (hasLedgerEntry) {
+              const custody = computeClientCustodyBalance(client.id, client.email, ledger, 420000.0, client.name);
+              return {
+                ...client,
+                btxcBalance: custody.gx,
+                brlBalance: custody.brl,
+                usdtBalance: custody.usdt,
+                estimatedMarketValue: custody.estimatedMarketValue,
+              };
             }
-            return parsed;
-          }
-          return [baseClient, ...parsed];
+            return client;
+          });
         }
       }
     } catch {}
-    return [baseClient];
+    return DEFAULT_REAL_CLIENTS;
   };
 
   const saveStoredRealClients = (clients: ExchangeClient[]) => {
@@ -835,6 +777,7 @@ END $$;
   const [p2pPort, setP2pPort] = useState('8333');
   const [maxSupply] = useState('1.500.000.000');
   const [confCopied, setConfCopied] = useState(false);
+  const [walletCopied, setWalletCopied] = useState(false);
 
   // Gestão de Clientes Reais no Painel de Configurações
   const [newClientId, setNewClientId] = useState('');
@@ -891,64 +834,145 @@ END $$;
   // Histórico de Custódia Auditável com TXID Criptográfico
   const [custodyLedger, setCustodyLedger] = useState<CustodyLedgerItem[]>(getStoredCustodyLedger);
 
-  // Ação de reconciliação expressa entre o Livro Razão e a Carteira de Clientes
-  const handleReconcileWithCustodyLedger = async () => {
-    const currentLedger = getStoredCustodyLedger();
-    const geoniCustody = computeClientCustodyBalance('GX-CLI-0001', 'geonimatos31@hotmail.com', currentLedger, price);
-
-    const reconciled = exchangeClients.map((c) => {
-      if (c.id === 'GX-CLI-0001' || c.email === 'geonimatos31@hotmail.com' || c.document?.replace(/\D/g, '') === '70781338387') {
-        return {
-          ...c,
-          titleBadge: 'Titular Principal',
-          document: '70781338387',
-          bitxAddress: c.bitxAddress || 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
-          btxcBalance: geoniCustody.gx,
-          brlBalance: geoniCustody.brl,
-          usdtBalance: geoniCustody.usdt,
-          estimatedMarketValue: geoniCustody.estimatedMarketValue,
-          status: 'Verificado KYC' as const,
-        };
+  // Inicialização: Zerar a lista de clientes do painel de configurações conforme solicitação
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('bitx_clients_zeroed_flag_v4') !== 'true') {
+        localStorage.setItem('bitx_clients_zeroed_flag_v4', 'true');
+        localStorage.setItem('bitx_ge_synced_clients', JSON.stringify([]));
+        localStorage.removeItem('bitx_exchange_clients');
+        localStorage.removeItem('bitx_clients');
+        localStorage.removeItem('bitx_real_exchange_clients');
+        localStorage.setItem('bitx_custody_ledger', JSON.stringify([]));
+        setExchangeClients([]);
+        setCustodyLedger([]);
+        setSelectedCustodyClientId('');
       }
-      return c;
-    });
+    } catch {}
+  }, []);
 
-    setCustodyLedger(currentLedger);
-    setExchangeClients(reconciled);
-    saveStoredRealClients(reconciled);
-    emitSyncToGlobalExchange(reconciled);
+  // 1. ZERAR A LISTA DE CLIENTES DO PAINEL DAS CONFIGURAÇÕES
+  const handleClearAllClients = () => {
+    setExchangeClients([]);
+    saveStoredRealClients([]);
+    try {
+      localStorage.setItem('bitx_ge_synced_clients', JSON.stringify([]));
+      localStorage.removeItem('bitx_exchange_clients');
+      localStorage.removeItem('bitx_clients');
+      localStorage.removeItem('bitx_real_exchange_clients');
+      localStorage.setItem('bitx_custody_ledger', JSON.stringify([]));
+    } catch {}
 
-    // Atualizar no Supabase Cloud
-    handlePushCustodyToSupabase();
+    setCustodyLedger([]);
+    setSelectedCustodyClientId('');
+    emitSyncToGlobalExchange([]);
 
-    setCustodyFeedback(
-      `✓ Carteira de Clientes 100% Reconciliada com o Livro Razão de Custódia Engecema (${geoniCustody.gx.toFixed(2)} GX · R$ ${geoniCustody.brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})!`
-    );
-    addLog(
-      `[Reconciliação Auditada] Saldo de Geoni Clementino Cesar de Matos reconciliado com o Livro Razão: ${geoniCustody.gx.toFixed(2)} GX (R$ ${geoniCustody.brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}). Transmitido para a Global Exchange.`,
-      'success'
-    );
-    setTimeout(() => setCustodyFeedback(''), 8000);
+    setClientFormFeedback('✓ Lista de clientes do painel de configurações zerada com sucesso!');
+    setCustodyFeedback('✓ Painel de custódia e livro razão sincronizados com a lista de clientes zerada.');
+    addLog('[Configurações] Lista de clientes da Corretora Global Exchange zerada pelo operador.', 'warning');
+    setTimeout(() => setClientFormFeedback(''), 5000);
+    setTimeout(() => setCustodyFeedback(''), 5000);
   };
 
-  const currentCustodyClient: ExchangeClient =
-    exchangeClients.find((c) => c.id === selectedCustodyClientId) ||
-    exchangeClients[0] || {
-      id: 'GX-CLI-0001',
-      name: 'Geoni Clementino Cesar de Matos',
-      titleBadge: 'Titular Principal',
-      email: 'geonimatos31@hotmail.com',
-      document: '70781338387',
-      bitxAddress: 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
-      btxcBalance: 250.0,
-      brlBalance: 42385000.0,
-      usdtBalance: 8477000.0,
-      estimatedMarketValue: 105270385.0,
-      status: 'Verificado KYC',
-    };
+  // 2. SINCRONIZAR O PAINEL DE CUSTÓDIA (ENGECEMA) E SEU LIVRO RAZÃO COM A CORRETORA GLOBAL EXCHANGE E BLOCKCHAIN BITX CORE
+  const handleSyncCustodyLedgerAndExchange = async () => {
+    setIsLoadingClients(true);
+    try {
+      const currentLedger = getStoredCustodyLedger();
 
-  const handleOpenEditCustodyModal = (client?: ExchangeClient) => {
+      if (exchangeClients.length === 0) {
+        setCustodyLedger([...currentLedger]);
+        setCustodyFeedback('✓ Painel de custódia (Engecema) e Livro Razão sincronizados com a Corretora Global Exchange (0 clientes ativos).');
+        addLog('[Sincronização Integrada] Painel de Custódia e Livro Razão reconciliados: base de clientes vazia (0 registros).', 'info');
+        setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
+        return;
+      }
+
+      const reconciledClients = exchangeClients.map((client) => {
+        const custodyBalance = computeClientCustodyBalance(
+          client.id,
+          client.email,
+          currentLedger,
+          price,
+          client.name
+        );
+
+        const hasEntry = currentLedger.some(
+          (entry) =>
+            (entry as any).clientId === client.id ||
+            entry.counterparty.toLowerCase().includes(client.id.toLowerCase()) ||
+            entry.counterparty.toLowerCase().includes(client.email.toLowerCase()) ||
+            entry.counterparty.toLowerCase().includes(client.name.toLowerCase())
+        );
+
+        if (hasEntry) {
+          return {
+            ...client,
+            btxcBalance: custodyBalance.gx,
+            brlBalance: custodyBalance.brl,
+            usdtBalance: custodyBalance.usdt,
+            estimatedMarketValue: custodyBalance.estimatedMarketValue,
+          };
+        } else {
+          // Se o cliente possui saldo e ainda não tem lançamento no Livro Razão, gera a entrada auditada
+          if (client.btxcBalance > 0 || client.brlBalance > 0) {
+            const auditTxid =
+              '0x' +
+              Array.from(crypto.getRandomValues(new Uint8Array(24)))
+                .map((b) => b.toString(16).padStart(2, '0'))
+                .join('');
+            const auditRecord: CustodyLedgerItem = {
+              id: 'CUST-' + Math.floor(100 + Math.random() * 900),
+              txid: auditTxid,
+              clientId: client.id,
+              type: 'Aporte Inicial',
+              amountGx: client.btxcBalance,
+              amountBrl: client.brlBalance > 0 ? client.brlBalance : client.btxcBalance * price,
+              counterparty: `Custódia Engecema PJ -> ${client.name} (${client.id})`,
+              timestamp: new Date().toLocaleString('pt-BR'),
+              status: 'Confirmado em Custódia',
+            };
+            currentLedger.unshift(auditRecord);
+          }
+          return client;
+        }
+      });
+
+      setCustodyLedger([...currentLedger]);
+      saveStoredCustodyLedger(currentLedger);
+      setExchangeClients(reconciledClients);
+      saveStoredRealClients(reconciledClients);
+      emitSyncToGlobalExchange(reconciledClients);
+
+      setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
+      setCustodyFeedback(
+        `✓ Painel de Custódia (Engecema), Livro Razão Auditável e Corretora Global Exchange 100% sincronizados com a Blockchain BitX Core (${reconciledClients.length} cliente(s))!`
+      );
+      addLog(
+        `[Sincronização Integrada] Livro Razão de Custódia Engecema sincronizado com a Corretora Global Exchange e BitX Core Blockchain (${reconciledClients.length} contas).`,
+        'success'
+      );
+      setTimeout(() => setCustodyFeedback(''), 8000);
+    } catch (err: any) {
+      setCustodyFeedback('Erro na sincronização: ' + (err?.message || 'Falha de comunicação'));
+    } finally {
+      setIsLoadingClients(false);
+    }
+  };
+
+  const handleReconcileWithCustodyLedger = handleSyncCustodyLedgerAndExchange;
+
+  const currentCustodyClient: ExchangeClient | null =
+    exchangeClients.find((c) => c.id === selectedCustodyClientId) ||
+    exchangeClients[0] ||
+    null;
+
+  const handleOpenEditCustodyModal = (client?: ExchangeClient | null) => {
     const target = client || currentCustodyClient;
+    if (!target) {
+      setCustodyFeedback('Nenhum cliente cadastrado em custódia. Cadastre clientes no Painel de Configurações.');
+      return;
+    }
     setSelectedCustodyClientId(target.id);
     setCustodyEditGxAmount(target.btxcBalance.toString());
     setCustodyEditReason('Aporte inicial de capital, rebalanceamento comercial');
@@ -957,6 +981,10 @@ END $$;
 
   const handleSaveCustodyEdit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentCustodyClient) {
+      setCustodyFeedback('Nenhum cliente selecionado.');
+      return;
+    }
     const newGx = parseFloat(custodyEditGxAmount);
     if (isNaN(newGx) || newGx < 0) {
       setCustodyFeedback('Informe uma quantidade válida de GX.');
@@ -999,10 +1027,11 @@ END $$;
     const newRecord: CustodyLedgerItem = {
       id: 'CUST-' + Math.floor(Math.random() * 900 + 100),
       txid,
+      clientId: client.id,
       type: 'Ajuste Direto com TXID',
       amountGx: newGx,
       amountBrl: newBrl,
-      counterparty: `Ajuste Direto (${custodyEditReason || 'Rebalanceamento'})`,
+      counterparty: `Ajuste Direto (${custodyEditReason || 'Rebalanceamento'}) -> ${client.name} (${client.id})`,
       timestamp: new Date().toLocaleString('pt-BR'),
       status: 'Confirmado em Custódia',
     };
@@ -1026,6 +1055,10 @@ END $$;
 
   const handleExecuteTransferBrl = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentCustodyClient) {
+      setTransferBrlFeedback({ message: 'Nenhum cliente selecionado.', success: false });
+      return;
+    }
     const brlAmt = parseFloat(transferBrlAmount);
     if (isNaN(brlAmt) || brlAmt <= 0) {
       setTransferBrlFeedback({ message: 'Informe um valor válido em Reais.', success: false });
@@ -1070,10 +1103,11 @@ END $$;
     const newRecord: CustodyLedgerItem = {
       id: 'CUST-PIX-' + Math.floor(Math.random() * 900 + 100),
       txid,
+      clientId: client.id,
       type: 'Transferência em Reais (Pix)',
       amountGx: -gxEquivalent,
       amountBrl: -brlAmt,
-      counterparty: `Pix BB Engecema -> ${transferBrlFavorecido} (${transferBrlPixKey})`,
+      counterparty: `Pix BB Engecema -> ${transferBrlFavorecido} (${transferBrlPixKey}) [Cliente: ${client.name}]`,
       timestamp: new Date().toLocaleString('pt-BR'),
       status: 'Liquidado Pix BB',
     };
@@ -1098,6 +1132,10 @@ END $$;
 
   const handleExecuteTransferGx = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentCustodyClient) {
+      setTransferGxFeedback({ message: 'Nenhum cliente selecionado.', success: false });
+      return;
+    }
     const gxAmt = parseFloat(transferGxAmount);
     if (isNaN(gxAmt) || gxAmt <= 0) {
       setTransferGxFeedback({ message: 'Informe uma quantidade válida de GX.', success: false });
@@ -1138,10 +1176,11 @@ END $$;
     const newRecord: CustodyLedgerItem = {
       id: 'CUST-GX-' + Math.floor(Math.random() * 900 + 100),
       txid,
+      clientId: client.id,
       type: 'Transferência em GX',
       amountGx: -gxAmt,
       amountBrl: -(gxAmt * price),
-      counterparty: `Destino: ${transferGxDestination}`,
+      counterparty: `Destino: ${transferGxDestination} [Cliente: ${client.name}]`,
       timestamp: new Date().toLocaleString('pt-BR'),
       status: 'Confirmado em Custódia',
     };
@@ -1198,6 +1237,30 @@ END $$;
 
     setExchangeClients(updated);
     saveStoredRealClients(updated);
+    emitSyncToGlobalExchange(updated);
+
+    // Se possui saldo inicial, registrar no Livro Razão de Custódia Engecema
+    if (btxcNum > 0 || brlNum > 0) {
+      const txid =
+        '0x' +
+        Array.from(crypto.getRandomValues(new Uint8Array(24)))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      const custodyRecord: CustodyLedgerItem = {
+        id: 'CUST-' + Math.floor(100 + Math.random() * 900),
+        txid,
+        clientId: clientRecord.id,
+        type: editingClient ? 'Ajuste Direto com TXID' : 'Aporte Inicial',
+        amountGx: btxcNum,
+        amountBrl: brlNum > 0 ? brlNum : btxcNum * price,
+        counterparty: `Custódia Engecema PJ -> ${clientRecord.name} (${clientRecord.id})`,
+        timestamp: new Date().toLocaleString('pt-BR'),
+        status: 'Confirmado em Custódia',
+      };
+      const newLedger = [custodyRecord, ...custodyLedger];
+      setCustodyLedger(newLedger);
+      saveStoredCustodyLedger(newLedger);
+    }
 
     // 2. Enviar para a nuvem Supabase
     try {
@@ -1529,10 +1592,29 @@ END $$;
     setWalletBalance((prev) => prev - amt - 0.0001);
     setExchangeDeposits((prev) => [newDeposit, ...prev]);
 
-    // Update client balance on broker
-    setExchangeClients((prev) =>
-      prev.map((c) => (c.id === client.id ? { ...c, btxcBalance: +(c.btxcBalance + amt).toFixed(4) } : c))
+    // Update client balance on broker & sync with custody ledger
+    const updatedWithDeposit = exchangeClients.map((c) =>
+      c.id === client.id ? { ...c, btxcBalance: +(c.btxcBalance + amt).toFixed(4) } : c
     );
+    setExchangeClients(updatedWithDeposit);
+    saveStoredRealClients(updatedWithDeposit);
+    emitSyncToGlobalExchange(updatedWithDeposit);
+
+    // Sincronizar depósito com o Livro Razão de Custódia & Liquidação Engecema
+    const custodyRecord: CustodyLedgerItem = {
+      id: 'CUST-DEP-' + Math.floor(Math.random() * 900 + 100),
+      txid,
+      clientId: client.id,
+      type: 'Depósito Blockchain BitX Core',
+      amountGx: amt,
+      amountBrl: +(amt * price).toFixed(2),
+      counterparty: `Depósito Blockchain BitX Core -> ${client.name} (${client.id})`,
+      timestamp: new Date().toLocaleString('pt-BR'),
+      status: 'Confirmado em Custódia',
+    };
+    const newLedger = [custodyRecord, ...custodyLedger];
+    setCustodyLedger(newLedger);
+    saveStoredCustodyLedger(newLedger);
 
     setDepositAlert(
       `Depósito de ${amt} BTXC para o cliente ${client.name} (${client.id}) transmitido! Tag vinculada à carteira da Global Exchange.`
@@ -1728,19 +1810,6 @@ daemon=1
             }}
           >
             🛡️ Painel de Custódia (Engecema)
-            <span
-              style={{
-                marginLeft: '8px',
-                background: 'rgba(16, 185, 129, 0.2)',
-                color: '#10b981',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                fontSize: '11px',
-                fontWeight: 700,
-              }}
-            >
-              101,00 GX · R$ 42,42M
-            </span>
           </button>
           <button
             type="button"
@@ -1901,16 +1970,23 @@ daemon=1
                       setCustodyEditGxAmount(sel.btxcBalance.toString());
                     }
                   }}
+                  disabled={exchangeClients.length === 0}
                 >
-                  {exchangeClients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.id}) &bull; {c.btxcBalance.toFixed(2)} GX
-                    </option>
-                  ))}
+                  {exchangeClients.length === 0 ? (
+                    <option value="">Nenhum cliente cadastrado (Lista zerada)</option>
+                  ) : (
+                    exchangeClients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.id}) &bull; {c.btxcBalance.toFixed(2)} GX
+                      </option>
+                    ))
+                  )}
                 </select>
                 <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Doc: {currentCustodyClient.document || '70781338387'}</span>
-                  <span style={{ color: '#10b981' }}>{currentCustodyClient.status}</span>
+                  <span>Doc: {currentCustodyClient ? currentCustodyClient.document || '—' : '—'}</span>
+                  <span style={{ color: currentCustodyClient ? '#10b981' : '#94a3b8' }}>
+                    {currentCustodyClient ? currentCustodyClient.status : 'Sem clientes ativos'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1966,10 +2042,12 @@ daemon=1
                       fontFamily: 'DM Mono, monospace',
                     }}
                   >
-                    {currentCustodyClient.btxcBalance.toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 4,
-                    })}{' '}
+                    {currentCustodyClient
+                      ? currentCustodyClient.btxcBalance.toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 4,
+                        })
+                      : '0,00'}{' '}
                     <span style={{ fontSize: '20px', color: '#f97316' }}>GX</span>
                   </div>
                   <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
@@ -1983,6 +2061,7 @@ daemon=1
                     className="portal-btn portal-btn-secondary"
                     style={{ width: '100%', fontSize: '12px', padding: '8px 12px' }}
                     onClick={() => handleOpenEditCustodyModal(currentCustodyClient)}
+                    disabled={!currentCustodyClient}
                   >
                     ✏️ Editar Saldo (Ajuste Direto com TXID)
                   </button>
@@ -2049,13 +2128,16 @@ daemon=1
                     }}
                   >
                     R${' '}
-                    {(currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {currentCustodyClient
+                      ? (currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : '0,00'}
                   </div>
                   <p style={{ margin: 0, fontSize: '12px', color: '#a7f3d0', lineHeight: 1.5 }}>
-                    Multiplicado automaticamente: <strong>{currentCustodyClient.btxcBalance.toFixed(2)} GX</strong> &times;{' '}
+                    Multiplicado automaticamente:{' '}
+                    <strong>{currentCustodyClient ? currentCustodyClient.btxcBalance.toFixed(2) : '0,00'} GX</strong> &times;{' '}
                     <strong>R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
                   </p>
                 </div>
@@ -2069,12 +2151,14 @@ daemon=1
                       fontSize: '13px',
                       fontWeight: 800,
                       padding: '10px 14px',
-                      background: '#10b981',
-                      color: '#022c22',
+                      background: currentCustodyClient ? '#10b981' : '#334155',
+                      color: currentCustodyClient ? '#022c22' : '#94a3b8',
                       border: 'none',
-                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)',
+                      boxShadow: currentCustodyClient ? '0 4px 10px rgba(16, 185, 129, 0.3)' : 'none',
+                      cursor: currentCustodyClient ? 'pointer' : 'not-allowed',
                     }}
                     onClick={() => setShowTransferBrlModal(true)}
+                    disabled={!currentCustodyClient}
                   >
                     💸 Transferir em Reais (R$) Agora
                   </button>
@@ -2124,10 +2208,12 @@ daemon=1
                     }}
                   >
                     ${' '}
-                    {((currentCustodyClient.btxcBalance * price) / 5.0).toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
+                    {currentCustodyClient
+                      ? ((currentCustodyClient.btxcBalance * price) / 5.0).toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : '0,00'}{' '}
                     <span style={{ fontSize: '18px', color: '#94a3b8' }}>USDT</span>
                   </div>
                   <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
@@ -2141,6 +2227,7 @@ daemon=1
                     className="portal-btn portal-btn-secondary"
                     style={{ width: '100%', fontSize: '12px', padding: '8px 12px', color: '#38bdf8' }}
                     onClick={() => setShowTransferGxModal(true)}
+                    disabled={!currentCustodyClient}
                   >
                     🪙 Transferir em GX (Token)
                   </button>
@@ -2168,20 +2255,22 @@ daemon=1
 
             {/* SEÇÃO VISUAL: AS DUAS OPÇÕES DE MOVIMENTAÇÃO AO CLIENTE */}
             <div className="portal-card" style={{ marginBottom: '24px' }}>
-              <div className="portal-card-header" style={{ borderBottom: '1px solid #1f2937', paddingBottom: '12px' }}>
-                <div>
-                  <h3 className="portal-card-title" style={{ fontSize: '16px', color: '#f8fafc' }}>
-                    Opções de Movimentação para o Cliente &bull; {currentCustodyClient.name}
-                  </h3>
-                  <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-                    O cliente possui <strong>{currentCustodyClient.btxcBalance.toFixed(2)} GX</strong> sob custódia, equivalentes a{' '}
-                    <strong style={{ color: '#10b981' }}>
-                      R$ {(currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </strong>
-                    . Escolha abaixo como deseja transferir:
-                  </p>
-                </div>
-              </div>
+              {currentCustodyClient ? (
+                <>
+                  <div className="portal-card-header" style={{ borderBottom: '1px solid #1f2937', paddingBottom: '12px' }}>
+                    <div>
+                      <h3 className="portal-card-title" style={{ fontSize: '16px', color: '#f8fafc' }}>
+                        Opções de Movimentação para o Cliente &bull; {currentCustodyClient.name}
+                      </h3>
+                      <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                        O cliente possui <strong>{currentCustodyClient.btxcBalance.toFixed(2)} GX</strong> sob custódia, equivalentes a{' '}
+                        <strong style={{ color: '#10b981' }}>
+                          R$ {(currentCustodyClient.btxcBalance * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </strong>
+                        . Escolha abaixo como deseja transferir:
+                      </p>
+                    </div>
+                  </div>
 
               <div
                 style={{
@@ -2471,7 +2560,26 @@ daemon=1
                   </div>
                 </div>
               </div>
+            </>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '36px 20px', color: '#94a3b8' }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>🛡️</div>
+              <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: '#f8fafc' }}>
+                Nenhum Cliente Ativo em Custódia
+              </h3>
+              <p style={{ margin: '0 0 16px', fontSize: '13px', maxWidth: '520px', marginInline: 'auto', lineHeight: 1.6 }}>
+                A lista de clientes foi zerada no Painel de Configurações. Para movimentar saldos em GX ou Reais via Pix BB, cadastre novas contas reais de clientes.
+              </p>
+              <button
+                type="button"
+                className="portal-btn portal-btn-primary"
+                onClick={() => setActiveTab('config')}
+              >
+                ⚙️ Ir ao Painel de Configurações para Cadastrar Cliente
+              </button>
             </div>
+          )}
+        </div>
 
             {/* LIVRO RAZÃO DE CUSTÓDIA & LIQUIDAÇÃO (LEDGER AUDITÁVEL) */}
             <div className="portal-card">
@@ -3729,11 +3837,9 @@ daemon=1
                     className="portal-btn portal-btn-secondary"
                     style={{ fontSize: '12px', padding: '6px 12px', borderColor: '#334155', color: '#94a3b8' }}
                     onClick={() => {
-                      if (window.confirm('Deseja purificar o cache e manter exclusivamente o operador oficial (geonimatos31@gmail.com)?')) {
-                        updateOperatorsAndPersist(DEFAULT_REAL_OPERATORS, '🧹 Lista de operadores restaurada com sucesso: apenas geonimatos31@gmail.com!');
-                        notifyCloudOperators(DEFAULT_REAL_OPERATORS);
-                        addLog('[Acessos] Lista purificada mantendo apenas operador oficial geonimatos31@gmail.com.', 'success');
-                      }
+                      updateOperatorsAndPersist(DEFAULT_REAL_OPERATORS, '🧹 Lista de operadores restaurada com sucesso: apenas geonimatos31@gmail.com!');
+                      notifyCloudOperators(DEFAULT_REAL_OPERATORS);
+                      addLog('[Acessos] Lista purificada mantendo apenas operador oficial geonimatos31@gmail.com.', 'success');
                     }}
                     title="Restaura a lista mantendo unicamente geonimatos31@gmail.com"
                   >
@@ -3851,7 +3957,9 @@ daemon=1
                                     className="portal-btn portal-btn-secondary"
                                     style={{ padding: '3px 10px', fontSize: '11px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
                                     onClick={() => {
-                                      if (users.length === 1 && !window.confirm(`Você está removendo o único operador cadastrado (${u.username}). Tem certeza?`)) {
+                                      if (users.length <= 1) {
+                                        setOperatorFeedback(`Não é possível remover o único operador ativo (${u.username}).`);
+                                        setTimeout(() => setOperatorFeedback(''), 4000);
                                         return;
                                       }
                                       const remaining = users.filter((item) => item.username !== u.username && item.id !== u.id);
@@ -4027,7 +4135,8 @@ daemon=1
                         const targetUser = newUsername.trim();
                         if (!targetUser) return;
                         if (users.some((x) => x.username.toLowerCase() === targetUser.toLowerCase() || x.email.toLowerCase() === targetUser.toLowerCase())) {
-                          alert('Este operador ou email já está cadastrado na lista.');
+                          setOperatorFeedback('Este operador ou email já está cadastrado na lista.');
+                          setTimeout(() => setOperatorFeedback(''), 4000);
                           return;
                         }
                         const newOp: OperatorUser = {
@@ -4825,10 +4934,11 @@ daemon=1
                     className="portal-btn portal-btn-secondary"
                     onClick={() => {
                       navigator.clipboard.writeText(walletAddress);
-                      alert('Endereço Mainnet copiado para a área de transferência!');
+                      setWalletCopied(true);
+                      setTimeout(() => setWalletCopied(false), 2500);
                     }}
                   >
-                    Copiar
+                    {walletCopied ? '✓ Copiado!' : 'Copiar'}
                   </button>
                 </div>
               </div>
