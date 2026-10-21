@@ -345,39 +345,21 @@ export const computeClientCustodyBalance = (
     }
   }
 
-  const isGeoni = idLower === 'gx-cli-0001' || emailLower.includes('geoni') || nameLower.includes('geoni');
-
-  // Se o cliente foi marcado como excluído pelo operador, saldos são zerados e não ressurgem
+  // Se o cliente foi marcado como excluído pelo operador, saldos são zerados
   if (isClientMarkedDeleted(clientId, clientEmail, undefined, clientName)) {
     return { gx: 0, brl: 0, usdt: 0, estimatedMarketValue: 0 };
   }
 
-  // Se o cliente for Geoni / GX-CLI-0001 e não tiver registros no ledger atual
-  if (!hasEntries && isGeoni) {
-    const cust001 = ledger.find((i) => i.id === 'CUST-001');
-    if (cust001) {
-      netGx = cust001.amountGx || 250.0;
-      netBrl = cust001.amountBrl || 42385000.0;
-      hasEntries = true;
-    } else {
-      netGx = 250.0;
-      netBrl = 42385000.0;
-    }
-  }
-
   const safeGx = Math.max(0, Number.isFinite(netGx) ? netGx : 0);
-  let safeBrl = Number.isFinite(netBrl) && netBrl > 0 ? netBrl : safeGx * refPrice;
-  if (isGeoni && Math.abs(safeGx - 250.0) < 0.001 && (!netBrl || netBrl === 0)) {
-    safeBrl = 42385000.0;
-  }
+  const safeBrl = Math.max(0, Number.isFinite(netBrl) ? netBrl : 0);
   const safeUsdt = +(safeBrl / 5.0).toFixed(2);
-  const estimatedMarketValue = safeGx * (105270385.0 / 250.0);
+  const estimatedMarketValue = +(safeGx * (105270385.0 / 250.0)).toFixed(2);
 
   return {
     gx: +safeGx.toFixed(4),
     brl: +safeBrl.toFixed(2),
     usdt: safeUsdt,
-    estimatedMarketValue: +estimatedMarketValue.toFixed(2),
+    estimatedMarketValue,
   };
 };
 
@@ -764,10 +746,10 @@ END $$;
             ? c.valor_mercado
             : (rawBtxc * (105270385.0 / 250.0));
 
-          const finalBtxc = isGeoni && rawBtxc <= 0 ? geoniCustody.gx : rawBtxc;
-          const finalBrl = isGeoni && rawBrl <= 0 ? geoniCustody.brl : rawBrl;
-          const finalUsdt = isGeoni && rawUsdt <= 0 ? geoniCustody.usdt : rawUsdt;
-          const finalEst = isGeoni && (!rawEst || rawEst <= 0) ? geoniCustody.estimatedMarketValue : rawEst;
+          const finalBtxc = Math.max(0, typeof rawBtxc === 'number' && !isNaN(rawBtxc) ? rawBtxc : 0.0);
+          const finalBrl = Math.max(0, typeof rawBrl === 'number' && !isNaN(rawBrl) ? rawBrl : 0.0);
+          const finalUsdt = Math.max(0, typeof rawUsdt === 'number' && !isNaN(rawUsdt) ? rawUsdt : +(finalBrl / 5.0).toFixed(2));
+          const finalEst = Math.max(0, typeof rawEst === 'number' && !isNaN(rawEst) && rawEst > 0 ? rawEst : +(finalBtxc * (105270385.0 / 250.0)).toFixed(2));
 
           return {
             id: String(c.id || (isGeoni ? 'GX-CLI-0001' : '')),
@@ -1010,50 +992,13 @@ END $$;
       const storedLedger = getStoredCustodyLedger();
       const hasInitialized = localStorage.getItem('bitx_ge_clients_initialized') === 'true';
 
-      // APENAS provisionar dados padrão na primeiríssima execução E se o cliente padrão NÃO foi excluído pelo usuário!
-      if (!hasInitialized && storedClients.length === 0 && storedLedger.length === 0) {
-        if (!isClientMarkedDeleted('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387', 'Geoni Clementino Cesar de Matos')) {
-          const defaultClient: ExchangeClient = {
-            id: 'GX-CLI-0001',
-            name: 'Geoni Clementino Cesar de Matos',
-            email: 'geonimatos31@hotmail.com',
-            document: '707.813.383-87',
-            titleBadge: 'Titular Principal Engecema',
-            bitxAddress: 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
-            btxcBalance: 250.0,
-            brlBalance: 42385000.0,
-            usdtBalance: 8477000.0,
-            estimatedMarketValue: 105270385.0,
-            status: 'Institucional',
-            createdAt: new Date().toLocaleDateString('pt-BR'),
-          };
-
-          const defaultLedgerRecord: CustodyLedgerItem = {
-            id: 'CUST-001',
-            txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b29c9ef4f481e1a49',
-            clientId: 'GX-CLI-0001',
-            type: 'Aporte Inicial',
-            amountGx: 250.0,
-            amountBrl: 42385000.0,
-            counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
-            timestamp: new Date().toLocaleString('pt-BR'),
-            status: 'Confirmado em Custódia',
-          };
-
-          setExchangeClients([defaultClient]);
-          saveStoredRealClients([defaultClient]);
-          setCustodyLedger([defaultLedgerRecord]);
-          saveStoredCustodyLedger([defaultLedgerRecord]);
-          setSelectedCustodyClientId('GX-CLI-0001');
-        }
-        localStorage.setItem('bitx_ge_clients_initialized', 'true');
-      } else {
-        localStorage.setItem('bitx_ge_clients_initialized', 'true');
-        if (storedClients.length > 0 && (!selectedCustodyClientId || selectedCustodyClientId === '')) {
+      localStorage.setItem('bitx_ge_clients_initialized', 'true');
+      if (storedClients.length > 0) {
+        if (!selectedCustodyClientId || !storedClients.some((c) => c.id === selectedCustodyClientId)) {
           setSelectedCustodyClientId(storedClients[0].id);
-        } else if (storedClients.length === 0) {
-          setSelectedCustodyClientId('');
         }
+      } else {
+        setSelectedCustodyClientId('');
       }
     } catch (e) {
       console.warn('[Inicialização Custódia & Clientes]:', e);
@@ -1533,11 +1478,25 @@ END $$;
       newClientId.trim() ||
       (editingClient ? editingClient.id : `GX-CLI-${Math.floor(1000 + Math.random() * 9000)}`);
 
+    const isGeoni =
+      assignedId.toLowerCase() === 'gx-cli-0001' ||
+      newClientEmail.toLowerCase().includes('geoni') ||
+      newClientName.toLowerCase().includes('geoni');
+
+    const assignedAddress =
+      editingClient?.bitxAddress ||
+      (isGeoni
+        ? 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey'
+        : `btxc1q${Array.from(crypto.getRandomValues(new Uint8Array(16)))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('')}`);
+
     const clientRecord: ExchangeClient = {
       id: assignedId,
       name: newClientName.trim(),
       email: newClientEmail.trim(),
       document: newClientDocument.trim() || (editingClient?.document || undefined),
+      bitxAddress: assignedAddress,
       btxcBalance: btxcNum,
       brlBalance: brlNum,
       usdtBalance: usdtNum,
@@ -1548,6 +1507,18 @@ END $$;
     // Desbloquear ID e e-mail caso tenham sido excluídos previamente
     clearStoredDeletedClientRecord(assignedId, newClientEmail, newClientDocument.trim());
 
+    // Se cadastrando cliente novo com saldo 0, certificar que não herda lançamentos fantasmas antigos no livro razão
+    if (!editingClient && btxcNum === 0 && brlNum === 0) {
+      const cleanLedger = custodyLedger.filter(
+        (i) =>
+          (i as any).clientId?.toLowerCase() !== assignedId.toLowerCase() &&
+          !i.counterparty.toLowerCase().includes(assignedId.toLowerCase()) &&
+          !i.counterparty.toLowerCase().includes(newClientEmail.toLowerCase())
+      );
+      setCustodyLedger(cleanLedger);
+      saveStoredCustodyLedger(cleanLedger);
+    }
+
     // 1. Salvar e ativar imediatamente no portal BitX Core & Global Exchange
     const updated = editingClient
       ? exchangeClients.map((c) => (c.id === editingClient.id ? clientRecord : c))
@@ -1557,7 +1528,7 @@ END $$;
     saveStoredRealClients(updated);
     emitSyncToGlobalExchange(updated);
 
-    // Se possui saldo inicial, registrar no Livro Razão de Custódia Engecema
+    // Se possui saldo inicial informado pelo operador, registrar no Livro Razão de Custódia Engecema
     if (btxcNum > 0 || brlNum > 0) {
       const txid =
         '0x' +
@@ -1587,7 +1558,9 @@ END $$;
         email: clientRecord.email,
         document: clientRecord.document || null,
         id: clientRecord.id,
+        bitx_address: clientRecord.bitxAddress,
         btxc_balance: clientRecord.btxcBalance || 0,
+        gx_balance: clientRecord.btxcBalance || 0,
         brl_balance: clientRecord.brlBalance || 0,
         usdt_balance: clientRecord.usdtBalance || 0,
         status: clientRecord.status || 'Verificado KYC',
@@ -1897,7 +1870,46 @@ END $$;
     return () => clearInterval(interval);
   }, [autoMining, blockHeight, mempool]);
 
-  // Handle new transaction emission
+  // Target client detection for Mempool transfers
+  const resolvedTargetClient = useMemo(() => {
+    if (!sendTo.trim()) return null;
+    const dest = sendTo.trim().toLowerCase();
+    const cleanDoc = dest.replace(/\D/g, '');
+
+    const found = exchangeClients.find((c) => {
+      const addr = (c.bitxAddress || '').toLowerCase();
+      const id = (c.id || '').toLowerCase();
+      const email = (c.email || '').toLowerCase();
+      const name = (c.name || '').toLowerCase();
+      const doc = (c.document || '').replace(/\D/g, '');
+
+      const isGeoniLegacy =
+        (id === 'gx-cli-0001' || name.includes('geoni') || email.includes('geoni')) &&
+        (dest === 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey' || dest === 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a');
+
+      return (
+        (addr && addr === dest) ||
+        (id && id === dest) ||
+        (email && email === dest) ||
+        (name && name === dest) ||
+        (cleanDoc.length >= 7 && doc === cleanDoc) ||
+        isGeoniLegacy
+      );
+    });
+
+    if (found) return found;
+
+    if (
+      exchangeClients.length === 1 &&
+      (dest === exchangeHotWallet.toLowerCase() || dest.startsWith('bxrt') || dest.startsWith('btxc') || dest.startsWith('0x'))
+    ) {
+      return exchangeClients[0];
+    }
+
+    return null;
+  }, [sendTo, exchangeClients, exchangeHotWallet]);
+
+  // Handle new transaction emission and automatic credit to client account on Global Exchange
   const handleSendTransaction = (e: React.FormEvent) => {
     e.preventDefault();
     if (!sendTo.trim() || !sendAmount) return;
@@ -1910,22 +1922,108 @@ END $$;
     }
 
     const txid = 'tx_' + Math.random().toString(16).substring(2, 12);
+    const dest = sendTo.trim();
+    const targetClient = resolvedTargetClient;
+
     const newTx: MempoolTx = {
       txid,
       from: walletAddress,
-      to: sendTo.trim(),
+      to: dest,
       amount: amt,
       fee: 0.0001,
       time: 'Agora',
-      exchangeClientTag: sendTo.trim() === exchangeHotWallet ? 'GE-DEPOSIT-DIRECT' : undefined,
+      exchangeClientTag: targetClient ? targetClient.id : (dest === exchangeHotWallet ? 'GE-DEPOSIT-DIRECT' : undefined),
     };
 
     setMempool((prev) => [newTx, ...prev]);
-    setWalletBalance((prev) => prev - amt - 0.0001);
-    setSendFeedback(`Transação ${txid} transmitida com sucesso para a Mempool da Mainnet!`);
+    setWalletBalance((prev) => +(prev - amt - 0.0001).toFixed(4));
+
+    if (targetClient) {
+      // 1. Atualizar saldo do cliente na Corretora Global Exchange imediatamente
+      const updatedClients = exchangeClients.map((c) => {
+        if (c.id === targetClient.id) {
+          const newBtxc = +(c.btxcBalance + amt).toFixed(4);
+          const newEst = +(newBtxc * (105270385.0 / 250.0)).toFixed(2);
+          return {
+            ...c,
+            btxcBalance: newBtxc,
+            estimatedMarketValue: newEst,
+          };
+        }
+        return c;
+      });
+
+      setExchangeClients(updatedClients);
+      saveStoredRealClients(updatedClients);
+      emitSyncToGlobalExchange(updatedClients);
+
+      // 2. Registrar no Livro Razão de Custódia Engecema (imutabilidade contábil)
+      const custodyRecord: CustodyLedgerItem = {
+        id: 'CUST-TX-' + Math.floor(Math.random() * 900 + 100),
+        txid,
+        clientId: targetClient.id,
+        type: 'Transferência BitX Core Mainnet',
+        amountGx: amt,
+        amountBrl: +(amt * price).toFixed(2),
+        counterparty: `Transferência BitX Core Mainnet (${walletAddress.substring(0, 14)}...) -> ${targetClient.name} (${targetClient.id})`,
+        timestamp: new Date().toLocaleString('pt-BR'),
+        status: 'Confirmado em Custódia',
+      };
+      const updatedLedger = [custodyRecord, ...custodyLedger];
+      setCustodyLedger(updatedLedger);
+      saveStoredCustodyLedger(updatedLedger);
+
+      // 3. Registrar no histórico de depósitos da Global Exchange
+      const newDeposit: ExchangeDepositRecord = {
+        id: 'DEP-' + Math.floor(Math.random() * 900 + 100),
+        clientId: targetClient.id,
+        clientName: targetClient.name,
+        txid,
+        amount: amt,
+        confirmations: 1,
+        status: 'Creditado',
+        time: 'Agora',
+      };
+      setExchangeDeposits((prev) => [newDeposit, ...prev]);
+
+      // 4. Sincronizar na nuvem Supabase em segundo plano
+      try {
+        const clientToUpdate = updatedClients.find((c) => c.id === targetClient.id);
+        if (clientToUpdate) {
+          supabase.from('clients').upsert([
+            {
+              id: clientToUpdate.id,
+              name: clientToUpdate.name,
+              email: clientToUpdate.email,
+              document: clientToUpdate.document || null,
+              bitx_address: clientToUpdate.bitxAddress || dest,
+              btxc_balance: clientToUpdate.btxcBalance,
+              gx_balance: clientToUpdate.btxcBalance,
+              brl_balance: clientToUpdate.brlBalance,
+              usdt_balance: clientToUpdate.usdtBalance,
+              estimated_market_value: clientToUpdate.estimatedMarketValue,
+              status: clientToUpdate.status || 'Verificado KYC',
+            },
+          ]);
+        }
+      } catch (err) {
+        console.warn('[Sync Transfer to Supabase]:', err);
+      }
+
+      setSendFeedback(
+        `✓ Transferência ${txid} realizada com sucesso! O valor de +${amt.toFixed(4)} BTXC foi creditado imediatamente na conta de "${targetClient.name}" (${targetClient.id}) na Global Exchange e sincronizado com o Livro Razão de Custódia Engecema.`
+      );
+      addLog(
+        `[Transferência BitX Core -> Global Exchange] +${amt.toFixed(4)} BTXC creditados na conta de ${targetClient.name} (${targetClient.id}). TXID: ${txid}`,
+        'success'
+      );
+    } else {
+      setSendFeedback(`Transação ${txid} transmitida com sucesso para a Mempool da Mainnet!`);
+      addLog(`Nova transação ${txid} (${amt} BTXC) recebida na Mempool e propagada via P2P.`, 'info');
+    }
+
     setSendTo('');
     setSendAmount('');
-    addLog(`Nova transação ${txid} (${amt} BTXC) recebida na Mempool e propagada via P2P.`, 'info');
   };
 
   // Handle client deposit into Global Exchange
@@ -5296,6 +5394,47 @@ daemon=1
               </div>
 
               <form onSubmit={handleSendTransaction}>
+                {exchangeClients.length > 0 && (
+                  <div style={{ marginBottom: '14px', padding: '10px 12px', background: '#090d16', border: '1px solid #1e293b', borderRadius: '6px' }}>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 600 }}>
+                      🎯 Destinatários Rápidos na Global Exchange (Clique para preencher o endereço):
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {exchangeClients.map((c) => {
+                        const addr = c.bitxAddress || (c.id === 'GX-CLI-0001' ? 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey' : 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a');
+                        const isSelected =
+                          sendTo.trim().toLowerCase() === addr.toLowerCase() ||
+                          sendTo.trim().toLowerCase() === c.id.toLowerCase();
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="portal-btn"
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: '11px',
+                              background: isSelected ? 'rgba(16, 185, 129, 0.25)' : '#0f172a',
+                              border: `1px solid ${isSelected ? '#10b981' : '#334155'}`,
+                              color: isSelected ? '#10b981' : '#f8fafc',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                            onClick={() => setSendTo(addr)}
+                          >
+                            <span>👤 {c.name}</span>
+                            <span style={{ color: '#f97316', fontFamily: 'monospace' }}>({c.id})</span>
+                            <span style={{ color: '#38bdf8', fontSize: '10px' }}>
+                              [Saldo: {c.btxcBalance.toFixed(4)} BTXC]
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div
                   style={{
                     display: 'grid',
@@ -5305,16 +5444,44 @@ daemon=1
                   }}
                 >
                   <div className="portal-form-group">
-                    <label>Endereço de Destino (Mainnet btxc1q...)</label>
+                    <label>Endereço de Destino (Mainnet btxc1q... ou bxrt1q...)</label>
                     <input
                       type="text"
                       className="portal-input portal-mono"
-                      placeholder="btxc1q..."
+                      placeholder="btxc1q... ou cole o endereço do cliente"
                       value={sendTo}
                       onChange={(e) => setSendTo(e.target.value)}
                       required
                     />
-                    <div style={{ marginTop: '4px' }}>
+
+                    {resolvedTargetClient && (
+                      <div
+                        style={{
+                          marginTop: '8px',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          background: 'rgba(16, 185, 129, 0.14)',
+                          border: '1px solid rgba(16, 185, 129, 0.4)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '8px',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '14px' }}>🛡️</span>
+                          <span style={{ color: '#10b981', fontWeight: 600 }}>Destinatário Reconhecido na Global Exchange:</span>
+                          <strong style={{ color: '#f8fafc' }}>{resolvedTargetClient.name}</strong>
+                          <span style={{ color: '#f97316', fontFamily: 'monospace' }}>({resolvedTargetClient.id})</span>
+                        </div>
+                        <div style={{ color: '#38bdf8', fontFamily: 'monospace', fontSize: '11px' }}>
+                          Saldo Atual: <strong>{resolvedTargetClient.btxcBalance.toFixed(4)} BTXC</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: '6px' }}>
                       <button
                         type="button"
                         style={{
