@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import '../styles/portal.css';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { supabase } from '../utils/supabase';
@@ -80,7 +80,8 @@ export interface CustodyLedgerItem {
     | 'Transferência em Reais (Pix)'
     | 'Transferência em GX'
     | 'Depósito Blockchain BitX Core'
-    | 'Sincronização Corretora';
+    | 'Sincronização Corretora'
+    | 'Transferência BitX Core Mainnet';
   amountGx: number;
   amountBrl: number;
   counterparty: string;
@@ -335,8 +336,7 @@ export const computeClientCustodyBalance = (
     const matchesClient =
       (itemClientId && itemClientId === idLower) ||
       (idLower && cpLower.includes(idLower)) ||
-      (emailLower && cpLower.includes(emailLower)) ||
-      (nameLower && cpLower.includes(nameLower));
+      (emailLower && emailLower.length > 3 && cpLower.includes(emailLower));
 
     if (matchesClient) {
       netGx += (item.amountGx || 0);
@@ -591,23 +591,21 @@ CREATE POLICY "Permitir Leitura e Escrita Global Exchange" ON public.clients
 
 GRANT ALL ON public.clients TO anon, authenticated, service_role;
 
--- 4. Gravação e atualização da posição real auditada de Geoni Clementino Cesar de Matos
--- Atualiza se o e-mail já existir (evitando o erro 23505 de chave única duplicada no email)
+-- 4. Registro ou atualização da conta de cliente sem forçar saldos artificiais
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM public.clients WHERE email = 'geonimatos31@hotmail.com') THEN
     UPDATE public.clients SET
       name = 'Geoni Clementino Cesar de Matos',
       document = '70781338387',
-      bitx_address = 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
-      btxc_balance = 250.0,
-      gx_balance = 250.0,
-      brl_balance = 42385000.0,
-      usdt_balance = 8477000.0,
-      estimated_market_value = 105270385.0,
+      bitx_address = COALESCE(bitx_address, 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey'),
+      btxc_balance = COALESCE(btxc_balance, 0.0),
+      gx_balance = COALESCE(gx_balance, btxc_balance, 0.0),
+      brl_balance = COALESCE(brl_balance, 0.0),
+      usdt_balance = COALESCE(usdt_balance, 0.0),
+      estimated_market_value = COALESCE(estimated_market_value, 0.0),
       status = 'Verificado KYC',
       title_badge = 'Titular Principal',
-      custody_txid = '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b',
       updated_at = NOW()
     WHERE email = 'geonimatos31@hotmail.com';
   ELSE
@@ -623,22 +621,20 @@ BEGIN
       usdt_balance,
       estimated_market_value,
       status,
-      title_badge,
-      custody_txid
+      title_badge
     ) VALUES (
       'GX-CLI-0001',
       'Geoni Clementino Cesar de Matos',
       'geonimatos31@hotmail.com',
       '70781338387',
       'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey',
-      250.0,
-      250.0,
-      42385000.0,
-      8477000.0,
-      105270385.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
       'Verificado KYC',
-      'Titular Principal',
-      '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b'
+      'Titular Principal'
     );
   END IF;
 END $$;
@@ -778,7 +774,11 @@ END $$;
           }
           const idx = combined.findIndex((x) => x.id === cc.id || (cc.email && x.email === cc.email));
           if (idx >= 0) {
-            combined[idx] = { ...combined[idx], ...cc };
+            combined[idx] = {
+              ...cc,
+              ...combined[idx],
+              bitxAddress: combined[idx].bitxAddress || cc.bitxAddress,
+            };
           } else {
             combined.push(cc);
           }
@@ -928,6 +928,8 @@ END $$;
   const [newClientName, setNewClientName] = useState('');
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientDocument, setNewClientDocument] = useState('');
+  const [newClientBitxAddress, setNewClientBitxAddress] = useState('');
+  const [selectedTransferRecipientId, setSelectedTransferRecipientId] = useState<string>('auto');
   const [newClientBtxc, setNewClientBtxc] = useState('0');
   const [newClientBrl, setNewClientBrl] = useState('0');
   const [newClientUsdt, setNewClientUsdt] = useState('0');
@@ -940,7 +942,7 @@ END $$;
   // ================= CUSTÓDIA ENGECEMA STATE & HANDLERS =================
   const [selectedCustodyClientId, setSelectedCustodyClientId] = useState<string>('GX-CLI-0001');
   const [showEditCustodyModal, setShowEditCustodyModal] = useState<boolean>(false);
-  const [custodyEditGxAmount, setCustodyEditGxAmount] = useState<string>('250.00');
+  const [custodyEditGxAmount, setCustodyEditGxAmount] = useState<string>('0.00');
   const [custodyEditReason, setCustodyEditReason] = useState<string>(
     'Aporte inicial de capital, rebalanceamento comercial'
   );
@@ -1484,6 +1486,7 @@ END $$;
       newClientName.toLowerCase().includes('geoni');
 
     const assignedAddress =
+      newClientBitxAddress.trim() ||
       editingClient?.bitxAddress ||
       (isGeoni
         ? 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey'
@@ -1500,6 +1503,7 @@ END $$;
       btxcBalance: btxcNum,
       brlBalance: brlNum,
       usdtBalance: usdtNum,
+      estimatedMarketValue: +(btxcNum * (105270385.0 / 250.0)).toFixed(2),
       status: newClientStatus,
       createdAt: editingClient?.createdAt || new Date().toLocaleDateString('pt-BR'),
     };
@@ -1507,28 +1511,24 @@ END $$;
     // Desbloquear ID e e-mail caso tenham sido excluídos previamente
     clearStoredDeletedClientRecord(assignedId, newClientEmail, newClientDocument.trim());
 
-    // Se cadastrando cliente novo com saldo 0, certificar que não herda lançamentos fantasmas antigos no livro razão
-    if (!editingClient && btxcNum === 0 && brlNum === 0) {
-      const cleanLedger = custodyLedger.filter(
-        (i) =>
-          (i as any).clientId?.toLowerCase() !== assignedId.toLowerCase() &&
-          !i.counterparty.toLowerCase().includes(assignedId.toLowerCase()) &&
-          !i.counterparty.toLowerCase().includes(newClientEmail.toLowerCase())
-      );
-      setCustodyLedger(cleanLedger);
-      saveStoredCustodyLedger(cleanLedger);
-    }
+    // Eliminar qualquer memória antiga ou lançamento residual no livro razão para este cliente
+    const idLower = assignedId.toLowerCase();
+    const emailLower = newClientEmail.toLowerCase();
+    const nameLower = newClientName.toLowerCase();
+    const docClean = newClientDocument.replace(/\D/g, '');
 
-    // 1. Salvar e ativar imediatamente no portal BitX Core & Global Exchange
-    const updated = editingClient
-      ? exchangeClients.map((c) => (c.id === editingClient.id ? clientRecord : c))
-      : [clientRecord, ...exchangeClients.filter((c) => c.id !== assignedId)];
+    let cleanLedger = custodyLedger.filter((item) => {
+      const itemCid = (item as any).clientId?.toLowerCase();
+      const cpLower = (item.counterparty || '').toLowerCase();
+      if (itemCid && itemCid === idLower) return false;
+      if (idLower && cpLower.includes(idLower)) return false;
+      if (emailLower && emailLower.length > 3 && cpLower.includes(emailLower)) return false;
+      if (nameLower && nameLower.length > 5 && cpLower.includes(nameLower)) return false;
+      if (docClean && docClean.length > 5 && cpLower.includes(docClean)) return false;
+      return true;
+    });
 
-    setExchangeClients(updated);
-    saveStoredRealClients(updated);
-    emitSyncToGlobalExchange(updated);
-
-    // Se possui saldo inicial informado pelo operador, registrar no Livro Razão de Custódia Engecema
+    // Se possui saldo inicial informado pelo operador, registrar como novo aporte limpo no Livro Razão
     if (btxcNum > 0 || brlNum > 0) {
       const txid =
         '0x' +
@@ -1541,15 +1541,25 @@ END $$;
         clientId: clientRecord.id,
         type: editingClient ? 'Ajuste Direto com TXID' : 'Aporte Inicial',
         amountGx: btxcNum,
-        amountBrl: brlNum > 0 ? brlNum : btxcNum * price,
+        amountBrl: brlNum > 0 ? brlNum : +(btxcNum * price).toFixed(2),
         counterparty: `Custódia Engecema PJ -> ${clientRecord.name} (${clientRecord.id})`,
         timestamp: new Date().toLocaleString('pt-BR'),
         status: 'Confirmado em Custódia',
       };
-      const newLedger = [custodyRecord, ...custodyLedger];
-      setCustodyLedger(newLedger);
-      saveStoredCustodyLedger(newLedger);
+      cleanLedger = [custodyRecord, ...cleanLedger];
     }
+
+    setCustodyLedger(cleanLedger);
+    saveStoredCustodyLedger(cleanLedger);
+
+    // 1. Salvar e ativar imediatamente no portal BitX Core & Global Exchange
+    const updated = editingClient
+      ? exchangeClients.map((c) => (c.id === editingClient.id ? clientRecord : c))
+      : [clientRecord, ...exchangeClients.filter((c) => c.id !== assignedId && c.email.toLowerCase() !== emailLower)];
+
+    setExchangeClients(updated);
+    saveStoredRealClients(updated);
+    emitSyncToGlobalExchange(updated);
 
     // 2. Enviar para a nuvem Supabase
     try {
@@ -1571,7 +1581,7 @@ END $$;
       if (error) {
         console.warn('Aviso Supabase Cloud RLS:', error.message);
         setClientFormFeedback(
-          `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) cadastrado e 100% ativo no sistema! (Para sincronizar também no Supabase Cloud, execute a liberação RLS no SQL Editor do Supabase).`
+          `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) cadastrado com sucesso! Saldo inicial: ${btxcNum.toFixed(2)} BTXC | R$ ${brlNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
         );
       } else {
         setClientFormFeedback(
@@ -1594,6 +1604,7 @@ END $$;
     setNewClientName(c.name);
     setNewClientEmail(c.email);
     setNewClientDocument(c.document || '');
+    setNewClientBitxAddress(c.bitxAddress || '');
     setNewClientBtxc(c.btxcBalance.toString());
     setNewClientBrl(c.brlBalance.toString());
     setNewClientUsdt(c.usdtBalance.toString());
@@ -1608,6 +1619,7 @@ END $$;
     setNewClientName('');
     setNewClientEmail('');
     setNewClientDocument('');
+    setNewClientBitxAddress('');
     setNewClientBtxc('0');
     setNewClientBrl('0');
     setNewClientUsdt('0');
@@ -1872,16 +1884,22 @@ END $$;
 
   // Target client detection for Mempool transfers
   const resolvedTargetClient = useMemo(() => {
+    // Se o operador selecionou explicitamente um cliente na lista suspensa
+    if (selectedTransferRecipientId && selectedTransferRecipientId !== 'auto') {
+      const explicit = exchangeClients.find((c) => c.id === selectedTransferRecipientId);
+      if (explicit) return explicit;
+    }
+
     if (!sendTo.trim()) return null;
     const dest = sendTo.trim().toLowerCase();
     const cleanDoc = dest.replace(/\D/g, '');
 
     const found = exchangeClients.find((c) => {
-      const addr = (c.bitxAddress || '').toLowerCase();
-      const id = (c.id || '').toLowerCase();
-      const email = (c.email || '').toLowerCase();
-      const name = (c.name || '').toLowerCase();
-      const doc = (c.document || '').replace(/\D/g, '');
+      const addr = (c.bitxAddress || '').toLowerCase().trim();
+      const id = (c.id || '').toLowerCase().trim();
+      const email = (c.email || '').toLowerCase().trim();
+      const name = (c.name || '').toLowerCase().trim();
+      const doc = (c.document || '').replace(/\D/g, '').trim();
 
       const isGeoniLegacy =
         (id === 'gx-cli-0001' || name.includes('geoni') || email.includes('geoni')) &&
@@ -1906,8 +1924,14 @@ END $$;
       return exchangeClients[0];
     }
 
+    const partialMatch = exchangeClients.find((c) => {
+      const addr = (c.bitxAddress || '').toLowerCase().trim();
+      return addr && (dest.includes(addr) || addr.includes(dest));
+    });
+    if (partialMatch) return partialMatch;
+
     return null;
-  }, [sendTo, exchangeClients, exchangeHotWallet]);
+  }, [sendTo, exchangeClients, exchangeHotWallet, selectedTransferRecipientId]);
 
   // Handle new transaction emission and automatic credit to client account on Global Exchange
   const handleSendTransaction = (e: React.FormEvent) => {
@@ -1940,14 +1964,20 @@ END $$;
 
     if (targetClient) {
       // 1. Atualizar saldo do cliente na Corretora Global Exchange imediatamente
+      const newBtxc = +(targetClient.btxcBalance + amt).toFixed(4);
+      const newBrl = +(targetClient.brlBalance + amt * price).toFixed(2);
+      const newUsdt = +(newBrl / 5.0).toFixed(2);
+      const newEst = +(newBtxc * (105270385.0 / 250.0)).toFixed(2);
+
       const updatedClients = exchangeClients.map((c) => {
         if (c.id === targetClient.id) {
-          const newBtxc = +(c.btxcBalance + amt).toFixed(4);
-          const newEst = +(newBtxc * (105270385.0 / 250.0)).toFixed(2);
           return {
             ...c,
             btxcBalance: newBtxc,
+            brlBalance: newBrl,
+            usdtBalance: newUsdt,
             estimatedMarketValue: newEst,
+            bitxAddress: c.bitxAddress || dest,
           };
         }
         return c;
@@ -2011,14 +2041,16 @@ END $$;
       }
 
       setSendFeedback(
-        `✓ Transferência ${txid} realizada com sucesso! O valor de +${amt.toFixed(4)} BTXC foi creditado imediatamente na conta de "${targetClient.name}" (${targetClient.id}) na Global Exchange e sincronizado com o Livro Razão de Custódia Engecema.`
+        `✓ Transferência ${txid} realizada com sucesso! O valor de +${amt.toFixed(4)} BTXC (R$ ${(amt * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) foi creditado imediatamente na conta de "${targetClient.name}" (${targetClient.id}) na Global Exchange e sincronizado com o Livro Razão de Custódia Engecema.`
       );
       addLog(
         `[Transferência BitX Core -> Global Exchange] +${amt.toFixed(4)} BTXC creditados na conta de ${targetClient.name} (${targetClient.id}). TXID: ${txid}`,
         'success'
       );
     } else {
-      setSendFeedback(`Transação ${txid} transmitida com sucesso para a Mempool da Mainnet!`);
+      setSendFeedback(
+        `Transação ${txid} transmitida com sucesso para a Mempool da Mainnet! (Aviso: O endereço "${dest}" não foi vinculado a nenhum cliente da Global Exchange. Para creditar na conta de um cliente, selecione-o no seletor de destinatário acima).`
+      );
       addLog(`Nova transação ${txid} (${amt} BTXC) recebida na Mempool e propagada via P2P.`, 'info');
     }
 
@@ -5120,6 +5152,22 @@ daemon=1
 
                   <div>
                     <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                      Endereço BitX Core (Destino na Rede)
+                    </label>
+                    <input
+                      type="text"
+                      className="portal-input portal-mono"
+                      placeholder="Ex: btxc1q... ou bxrt1q... (Vazio para gerar automático)"
+                      value={newClientBitxAddress}
+                      onChange={(e) => setNewClientBitxAddress(e.target.value)}
+                    />
+                    <small style={{ fontSize: '10px', color: '#64748b' }}>
+                      Endereço exclusivo para recebimento de transferências na Mainnet.
+                    </small>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
                       Saldo Inicial BTXC
                     </label>
                     <input
@@ -5395,14 +5443,44 @@ daemon=1
 
               <form onSubmit={handleSendTransaction}>
                 {exchangeClients.length > 0 && (
-                  <div style={{ marginBottom: '14px', padding: '10px 12px', background: '#090d16', border: '1px solid #1e293b', borderRadius: '6px' }}>
+                  <div style={{ marginBottom: '14px', padding: '12px 14px', background: '#090d16', border: '1px solid #1e293b', borderRadius: '6px' }}>
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                        🎯 Vincular Crédito à Conta do Cliente na Global Exchange:
+                      </label>
+                      <select
+                        className="portal-input"
+                        value={selectedTransferRecipientId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedTransferRecipientId(val);
+                          if (val !== 'auto') {
+                            const client = exchangeClients.find((c) => c.id === val);
+                            if (client) {
+                              const addr = client.bitxAddress || (client.id === 'GX-CLI-0001' ? 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey' : 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a');
+                              setSendTo(addr);
+                            }
+                          }
+                        }}
+                        style={{ width: '100%', fontSize: '13px' }}
+                      >
+                        <option value="auto">🔍 Auto-detectar cliente pelo Endereço BitX Core digitado</option>
+                        {exchangeClients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            👤 {c.name} ({c.id}) — Saldo Atual: {c.btxcBalance.toFixed(4)} BTXC | Endereço: {c.bitxAddress ? `${c.bitxAddress.substring(0, 14)}...` : 'Padrão'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 600 }}>
-                      🎯 Destinatários Rápidos na Global Exchange (Clique para preencher o endereço):
+                      Destinatários Rápidos (Clique para selecionar o cliente e preencher o endereço):
                     </label>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {exchangeClients.map((c) => {
                         const addr = c.bitxAddress || (c.id === 'GX-CLI-0001' ? 'bxrt1qnk68972j7s9k8j3z2p987e9k3l98764s0zey' : 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a');
                         const isSelected =
+                          selectedTransferRecipientId === c.id ||
                           sendTo.trim().toLowerCase() === addr.toLowerCase() ||
                           sendTo.trim().toLowerCase() === c.id.toLowerCase();
                         return (
@@ -5421,7 +5499,10 @@ daemon=1
                               alignItems: 'center',
                               gap: '6px',
                             }}
-                            onClick={() => setSendTo(addr)}
+                            onClick={() => {
+                              setSelectedTransferRecipientId(c.id);
+                              setSendTo(addr);
+                            }}
                           >
                             <span>👤 {c.name}</span>
                             <span style={{ color: '#f97316', fontFamily: 'monospace' }}>({c.id})</span>
