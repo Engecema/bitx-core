@@ -180,6 +180,39 @@ export const saveStoredCustodyLedger = (ledger: CustodyLedgerItem[]) => {
   } catch {}
 };
 
+const STORAGE_DELETED_CLIENTS_KEY = 'bitx_deleted_clients_ids_v1';
+
+export const getStoredDeletedClientIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_DELETED_CLIENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+export const addStoredDeletedClientId = (id: string, email?: string) => {
+  try {
+    const current = getStoredDeletedClientIds();
+    const toAdd = [id.toLowerCase()];
+    if (email) toAdd.push(email.toLowerCase());
+    const updated = Array.from(new Set([...current, ...toAdd]));
+    localStorage.setItem(STORAGE_DELETED_CLIENTS_KEY, JSON.stringify(updated));
+  } catch {}
+};
+
+export const clearStoredDeletedClientId = (id: string, email?: string) => {
+  try {
+    const current = getStoredDeletedClientIds();
+    const idLower = id.toLowerCase();
+    const emailLower = email?.toLowerCase();
+    const updated = current.filter((x) => x !== idLower && x !== emailLower);
+    localStorage.setItem(STORAGE_DELETED_CLIENTS_KEY, JSON.stringify(updated));
+  } catch {}
+};
+
 export const computeClientCustodyBalance = (
   clientId: string,
   clientEmail: string,
@@ -647,7 +680,11 @@ END $$;
           };
         });
 
+        const deletedIds = new Set(getStoredDeletedClientIds().map((x) => x.toLowerCase()));
         for (const cc of cloudClients) {
+          if (deletedIds.has(cc.id.toLowerCase()) || (cc.email && deletedIds.has(cc.email.toLowerCase()))) {
+            continue;
+          }
           const idx = combined.findIndex((x) => x.id === cc.id || (cc.email && x.email === cc.email));
           if (idx >= 0) {
             combined[idx] = { ...combined[idx], ...cc };
@@ -656,6 +693,11 @@ END $$;
           }
         }
       }
+
+      const activeDeletedIds = new Set(getStoredDeletedClientIds().map((x) => x.toLowerCase()));
+      combined = combined.filter(
+        (c) => !activeDeletedIds.has(c.id.toLowerCase()) && (!c.email || !activeDeletedIds.has(c.email.toLowerCase()))
+      );
 
       setExchangeClients(combined);
       saveStoredRealClients(combined);
@@ -801,7 +843,7 @@ END $$;
   const [newClientStatus, setNewClientStatus] = useState<'Institucional' | 'Verificado KYC' | 'VIP' | 'Ativo'>('Verificado KYC');
   const [clientFormFeedback, setClientFormFeedback] = useState<string>('');
   const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
-  const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string; email?: string } | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
 
   // ================= CUSTÓDIA ENGECEMA STATE & HANDLERS =================
@@ -935,66 +977,41 @@ END $$;
         currentClients = getStoredRealClients();
       }
 
-      // Se ambos estiverem vazios (ex: após limpeza total), provisionar o titular institucional oficial Engecema
-      if (currentClients.length === 0 && currentLedger.length === 0) {
-        const defaultClient: ExchangeClient = {
-          id: 'GX-CLI-0001',
-          name: 'Geoni Clementino Cesar de Matos',
-          email: 'geonimatos31@hotmail.com',
-          document: '707.813.383-87',
-          titleBadge: 'Titular Principal Engecema',
-          bitxAddress: 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
-          btxcBalance: 250.0,
-          brlBalance: 42385000.0,
-          usdtBalance: 8477000.0,
-          estimatedMarketValue: 105270385.0,
-          status: 'Institucional',
-          createdAt: new Date().toLocaleDateString('pt-BR'),
-        };
+      const deletedIds = new Set(getStoredDeletedClientIds().map((x) => x.toLowerCase()));
 
-        const defaultLedgerRecord: CustodyLedgerItem = {
-          id: 'CUST-001',
-          txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b29c9ef4f481e1a49',
-          clientId: 'GX-CLI-0001',
-          type: 'Aporte Inicial',
-          amountGx: 250.0,
-          amountBrl: 42385000.0,
-          counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
-          timestamp: new Date().toLocaleString('pt-BR'),
-          status: 'Confirmado em Custódia',
-        };
+      // 1. Purificar a lista de clientes para garantir que NENHUM cliente removido esteja presente
+      currentClients = currentClients.filter(
+        (c) => !deletedIds.has(c.id.toLowerCase()) && (!c.email || !deletedIds.has(c.email.toLowerCase()))
+      );
 
-        currentClients = [defaultClient];
-        currentLedger = [defaultLedgerRecord];
-      } else if (currentClients.length === 0 && currentLedger.length > 0) {
-        // Se há lançamentos no Livro Razão mas a lista de clientes está vazia em memória, restaurar clientes a partir do Livro Razão
-        const clientIdsFound = Array.from(new Set(currentLedger.map((l) => (l as any).clientId || 'GX-CLI-0001')));
-        const restored: ExchangeClient[] = [];
+      // 2. Purificar o Livro Razão de Custódia Engecema para que NUNCA contenha lançamentos de clientes excluídos
+      const activeClientIds = new Set(currentClients.map((c) => c.id.toLowerCase()));
+      const activeClientEmails = new Set(currentClients.map((c) => (c.email || '').toLowerCase()));
+      const activeClientNames = new Set(currentClients.map((c) => (c.name || '').toLowerCase()));
 
-        for (const cId of clientIdsFound) {
-          const matchingEntries = currentLedger.filter((l) => (l as any).clientId === cId || l.counterparty.includes(cId));
-          const firstEntry = matchingEntries[0];
-          const isGeoni = cId === 'GX-CLI-0001' || (firstEntry?.counterparty || '').toLowerCase().includes('geoni');
+      currentLedger = currentLedger.filter((item) => {
+        const itemCid = (item as any).clientId?.toLowerCase();
+        const cpLower = (item.counterparty || '').toLowerCase();
 
-          const computed = computeClientCustodyBalance(cId, isGeoni ? 'geonimatos31@hotmail.com' : '', currentLedger, price);
-
-          restored.push({
-            id: cId,
-            name: isGeoni ? 'Geoni Clementino Cesar de Matos' : `Cliente ${cId}`,
-            email: isGeoni ? 'geonimatos31@hotmail.com' : `cliente_${cId.toLowerCase()}@globalexchange.com`,
-            document: isGeoni ? '707.813.383-87' : undefined,
-            titleBadge: isGeoni ? 'Titular Principal Engecema' : 'Cliente Verificado',
-            bitxAddress: isGeoni ? 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a' : undefined,
-            btxcBalance: computed.gx,
-            brlBalance: computed.brl,
-            usdtBalance: computed.usdt,
-            estimatedMarketValue: computed.estimatedMarketValue,
-            status: isGeoni ? 'Institucional' : 'Verificado KYC',
-            createdAt: new Date().toLocaleDateString('pt-BR'),
-          });
+        // Se pertencer a cliente deletado, descarta imediatamente
+        if (itemCid && deletedIds.has(itemCid)) return false;
+        for (const dId of deletedIds) {
+          if (dId && cpLower.includes(dId)) return false;
         }
-        currentClients = restored;
-      }
+
+        // Se houver clientes ativos, o lançamento deve pertencer a um deles
+        if (currentClients.length > 0) {
+          if (itemCid) return activeClientIds.has(itemCid);
+          const matchesActive =
+            Array.from(activeClientIds).some((id) => id && cpLower.includes(id)) ||
+            Array.from(activeClientEmails).some((em) => em && cpLower.includes(em)) ||
+            Array.from(activeClientNames).some((nm) => nm && cpLower.includes(nm));
+          return matchesActive;
+        }
+
+        // Se não houver clientes ativos (foram removidos), o Livro Razão também fica vazio
+        return false;
+      });
 
       // Reconciliar cada cliente com o Livro Razão
       const reconciledClients = currentClients.map((client) => {
@@ -1389,6 +1406,9 @@ END $$;
       createdAt: editingClient?.createdAt || new Date().toLocaleDateString('pt-BR'),
     };
 
+    // Desbloquear ID e e-mail caso tenham sido excluídos previamente
+    clearStoredDeletedClientId(assignedId, newClientEmail);
+
     // 1. Salvar e ativar imediatamente no portal BitX Core & Global Exchange
     const updated = editingClient
       ? exchangeClients.map((c) => (c.id === editingClient.id ? clientRecord : c))
@@ -1484,22 +1504,72 @@ END $$;
 
   const confirmDeleteRealClient = async () => {
     if (!clientToDelete) return;
-    const { id, name } = clientToDelete;
-    
+    const { id, name, email } = clientToDelete;
+    const idLower = id.toLowerCase();
+    const emailLower = email?.toLowerCase();
+
+    // 1. Gravar nos identificadores de clientes excluídos para que nunca seja ressuscitado
+    addStoredDeletedClientId(id, email);
+
+    // 2. Remover do banco Supabase Cloud por id e por email
     try {
       await supabase.from('clients').delete().eq('id', id);
-    } catch {}
+      if (email) {
+        await supabase.from('clients').delete().eq('email', email);
+      }
+    } catch (err) {
+      console.warn('[Supabase Cloud] Erro ao deletar cliente:', err);
+    }
 
+    // 3. Remover da Corretora Global Exchange e do Painel de Configurações
     const remaining = exchangeClients.filter((c) => c.id !== id);
     setExchangeClients(remaining);
     saveStoredRealClients(remaining);
+    emitSyncToGlobalExchange(remaining);
+
+    // 4. Remover do Painel de Custódia e expurgar TODOS os lançamentos do Livro Razão (Ledger Auditável Engecema)
+    const currentLedger = getStoredCustodyLedger();
+    const updatedLedger = currentLedger.filter((item) => {
+      const itemCid = (item as any).clientId?.toLowerCase();
+      const cpLower = (item.counterparty || '').toLowerCase();
+      const matchesDeletedClient =
+        (itemCid && itemCid === idLower) ||
+        cpLower.includes(idLower) ||
+        cpLower.includes(name.toLowerCase()) ||
+        (emailLower && cpLower.includes(emailLower));
+      return !matchesDeletedClient;
+    });
+
+    setCustodyLedger(updatedLedger);
+    saveStoredCustodyLedger(updatedLedger);
+
+    // 5. Atualizar o cliente selecionado na Custódia
+    if (selectedCustodyClientId === id) {
+      setSelectedCustodyClientId(remaining.length > 0 ? remaining[0].id : '');
+    }
 
     if (editingClient?.id === id) {
       handleCancelEditClient();
     }
     setClientToDelete(null);
-    setClientFormFeedback(`✓ Cliente "${name}" (${id}) desvinculado.`);
-    setTimeout(() => setClientFormFeedback(''), 4000);
+
+    const successMsg = `✓ Cliente "${name}" (${id}) foi completamente removido do Painel de Configurações, da Corretora Global Exchange, do Painel de Custódia e do Livro Razão.`;
+    setClientFormFeedback(successMsg);
+    setCustodyFeedback(successMsg);
+    setReconcileNotice({
+      message: `✓ Cliente "${name}" (${id}) removido de todos os módulos.`,
+      details: `Base atual: ${remaining.length} cliente(s) ativo(s) e ${updatedLedger.length} lançamento(s) no Livro Razão.`,
+      type: 'info',
+      timestamp: new Date().toLocaleTimeString('pt-BR'),
+    });
+
+    addLog(
+      `[Configurações & Custódia] Cliente "${name}" (${id}) removido da Corretora Global Exchange, do Painel de Custódia e do Livro Razão Engecema.`,
+      'warning'
+    );
+
+    setTimeout(() => setClientFormFeedback(''), 8000);
+    setTimeout(() => setCustodyFeedback(''), 8000);
   };
 
   // Limpar qualquer cache e forçar sincronização exclusiva com a Global Exchange
@@ -3990,6 +4060,15 @@ daemon=1
                                 >
                                   Negociar
                                 </button>
+                                <button
+                                  type="button"
+                                  className="portal-btn portal-btn-secondary"
+                                  style={{ padding: '3px 8px', fontSize: '11px', color: '#ef4444' }}
+                                  onClick={() => setClientToDelete({ id: c.id, name: c.name, email: c.email })}
+                                  title="Remover cliente da Corretora, do Painel de Custódia e do Livro Razão"
+                                >
+                                  Remover
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -4980,7 +5059,7 @@ daemon=1
                                 type="button"
                                 className="portal-btn portal-btn-secondary"
                                 style={{ padding: '3px 8px', fontSize: '11px', color: '#ef4444' }}
-                                onClick={() => setClientToDelete({ id: c.id, name: c.name })}
+                                onClick={() => setClientToDelete({ id: c.id, name: c.name, email: c.email })}
                               >
                                 Remover
                               </button>
@@ -5561,7 +5640,8 @@ daemon=1
                 Remover Cliente Real
               </h3>
               <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.5', margin: '0 0 20px' }}>
-                Deseja realmente remover o cliente <strong>"{clientToDelete.name}"</strong> (<code>{clientToDelete.id}</code>) da Global Exchange? Esta ação atualizará o Painel de Configurações e a lista de depósitos imediatamente.
+                Deseja realmente remover o cliente <strong>"{clientToDelete.name}"</strong> (<code>{clientToDelete.id}</code>)?
+                Esta ação removerá o cliente da <strong>Corretora Global Exchange</strong>, do <strong>Painel de Custódia</strong> e expurgará todos os seus lançamentos do <strong>Livro Razão Engecema</strong>.
               </p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
