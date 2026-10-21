@@ -161,28 +161,16 @@ export const saveStoredOperators = (ops: OperatorUser[]) => {
 
 export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [];
 
-export const getStoredCustodyLedger = (): CustodyLedgerItem[] => {
-  try {
-    const saved = localStorage.getItem('bitx_custody_ledger');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch {}
-  return DEFAULT_CUSTODY_LEDGER;
-};
+export interface DeletedClientRecord {
+  id: string;
+  email?: string;
+  document?: string;
+  name?: string;
+}
 
-export const saveStoredCustodyLedger = (ledger: CustodyLedgerItem[]) => {
-  try {
-    localStorage.setItem('bitx_custody_ledger', JSON.stringify(ledger));
-  } catch {}
-};
+const STORAGE_DELETED_CLIENTS_KEY = 'bitx_deleted_clients_records_v2';
 
-const STORAGE_DELETED_CLIENTS_KEY = 'bitx_deleted_clients_ids_v1';
-
-export const getStoredDeletedClientIds = (): string[] => {
+export const getStoredDeletedClientRecords = (): DeletedClientRecord[] => {
   try {
     const raw = localStorage.getItem(STORAGE_DELETED_CLIENTS_KEY);
     if (raw) {
@@ -193,23 +181,131 @@ export const getStoredDeletedClientIds = (): string[] => {
   return [];
 };
 
-export const addStoredDeletedClientId = (id: string, email?: string) => {
+export const getStoredDeletedClientIds = (): string[] => {
   try {
-    const current = getStoredDeletedClientIds();
-    const toAdd = [id.toLowerCase()];
-    if (email) toAdd.push(email.toLowerCase());
-    const updated = Array.from(new Set([...current, ...toAdd]));
+    const records = getStoredDeletedClientRecords();
+    const result: string[] = [];
+    for (const r of records) {
+      if (r.id) result.push(r.id.toLowerCase().trim());
+      if (r.email) result.push(r.email.toLowerCase().trim());
+      if (r.document) result.push(r.document.replace(/\D/g, '').trim());
+      if (r.name) result.push(r.name.toLowerCase().trim());
+    }
+    return result;
+  } catch {
+    return [];
+  }
+};
+
+export const addStoredDeletedClientRecord = (record: {
+  id: string;
+  email?: string;
+  document?: string;
+  name?: string;
+}) => {
+  try {
+    const current = getStoredDeletedClientRecords();
+    const idLower = (record.id || '').toLowerCase().trim();
+    const emailLower = (record.email || '').toLowerCase().trim();
+    const docClean = (record.document || '').replace(/\D/g, '').trim();
+    const nameLower = (record.name || '').toLowerCase().trim();
+
+    const exists = current.some((c) => {
+      if (idLower && c.id && c.id.toLowerCase() === idLower) return true;
+      if (emailLower && c.email && c.email.toLowerCase() === emailLower) return true;
+      if (docClean && docClean.length > 5 && c.document && c.document.replace(/\D/g, '') === docClean) return true;
+      if (nameLower && nameLower.length > 5 && c.name && c.name.toLowerCase() === nameLower) return true;
+      return false;
+    });
+
+    if (!exists) {
+      const updated = [
+        ...current,
+        {
+          id: idLower,
+          email: emailLower || undefined,
+          document: docClean || undefined,
+          name: nameLower || undefined,
+        },
+      ];
+      localStorage.setItem(STORAGE_DELETED_CLIENTS_KEY, JSON.stringify(updated));
+    }
+  } catch {}
+};
+
+export const addStoredDeletedClientId = (
+  id: string,
+  email?: string,
+  doc?: string,
+  name?: string
+) => {
+  addStoredDeletedClientRecord({ id, email, document: doc, name });
+};
+
+export const clearStoredDeletedClientRecord = (id: string, email?: string, doc?: string) => {
+  try {
+    const current = getStoredDeletedClientRecords();
+    const idLower = (id || '').toLowerCase().trim();
+    const emailLower = (email || '').toLowerCase().trim();
+    const docClean = (doc || '').replace(/\D/g, '').trim();
+
+    const updated = current.filter((c) => {
+      if (idLower && c.id.toLowerCase() === idLower) return false;
+      if (emailLower && c.email && c.email.toLowerCase() === emailLower) return false;
+      if (docClean && c.document && c.document.replace(/\D/g, '') === docClean) return false;
+      return true;
+    });
     localStorage.setItem(STORAGE_DELETED_CLIENTS_KEY, JSON.stringify(updated));
   } catch {}
 };
 
-export const clearStoredDeletedClientId = (id: string, email?: string) => {
+export const clearStoredDeletedClientId = (id: string, email?: string, doc?: string) => {
+  clearStoredDeletedClientRecord(id, email, doc);
+};
+
+export const isClientMarkedDeleted = (
+  id?: string,
+  email?: string,
+  doc?: string,
+  name?: string
+): boolean => {
+  const records = getStoredDeletedClientRecords();
+  if (records.length === 0) return false;
+
+  const idLower = (id || '').toLowerCase().trim();
+  const emailLower = (email || '').toLowerCase().trim();
+  const docClean = (doc || '').replace(/\D/g, '').trim();
+  const nameLower = (name || '').toLowerCase().trim();
+
+  return records.some((r) => {
+    if (idLower && r.id && (r.id === idLower || idLower.includes(r.id) || r.id.includes(idLower))) return true;
+    if (emailLower && r.email && (r.email === emailLower || emailLower === r.email)) return true;
+    if (docClean && docClean.length > 5 && r.document && r.document === docClean) return true;
+    if (nameLower && r.name && (r.name === nameLower || (nameLower.length > 6 && r.name.includes(nameLower)))) return true;
+    return false;
+  });
+};
+
+export const getStoredCustodyLedger = (): CustodyLedgerItem[] => {
   try {
-    const current = getStoredDeletedClientIds();
-    const idLower = id.toLowerCase();
-    const emailLower = email?.toLowerCase();
-    const updated = current.filter((x) => x !== idLower && x !== emailLower);
-    localStorage.setItem(STORAGE_DELETED_CLIENTS_KEY, JSON.stringify(updated));
+    const saved = localStorage.getItem('bitx_custody_ledger');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item) => {
+          const itemCid = (item as any).clientId;
+          const cp = item.counterparty || '';
+          return !isClientMarkedDeleted(itemCid, undefined, undefined, cp);
+        });
+      }
+    }
+  } catch {}
+  return DEFAULT_CUSTODY_LEDGER;
+};
+
+export const saveStoredCustodyLedger = (ledger: CustodyLedgerItem[]) => {
+  try {
+    localStorage.setItem('bitx_custody_ledger', JSON.stringify(ledger));
   } catch {}
 };
 
@@ -250,6 +346,11 @@ export const computeClientCustodyBalance = (
   }
 
   const isGeoni = idLower === 'gx-cli-0001' || emailLower.includes('geoni') || nameLower.includes('geoni');
+
+  // Se o cliente foi marcado como excluído pelo operador, saldos são zerados e não ressurgem
+  if (isClientMarkedDeleted(clientId, clientEmail, undefined, clientName)) {
+    return { gx: 0, brl: 0, usdt: 0, estimatedMarketValue: 0 };
+  }
 
   // Se o cliente for Geoni / GX-CLI-0001 e não tiver registros no ledger atual
   if (!hasEntries && isGeoni) {
@@ -405,9 +506,13 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       if (stored !== null) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
+          // Filtrar expressamente qualquer cliente marcado como deletado para não ressuscitar no F5
+          const active = parsed.filter(
+            (c: ExchangeClient) => !isClientMarkedDeleted(c.id, c.email, c.document, c.name)
+          );
           const ledger = getStoredCustodyLedger();
           // Sincronizar dinamicamente os saldos de cada cliente cadastrado com o Livro Razão se houver registros
-          return parsed.map((client: ExchangeClient) => {
+          return active.map((client: ExchangeClient) => {
             const hasLedgerEntry = ledger.some(
               (item) =>
                 (item as any).clientId === client.id ||
@@ -680,9 +785,13 @@ END $$;
           };
         });
 
-        const deletedIds = new Set(getStoredDeletedClientIds().map((x) => x.toLowerCase()));
+        const deletedIds = new Set(getStoredDeletedClientIds().map((x: string) => x.toLowerCase()));
         for (const cc of cloudClients) {
-          if (deletedIds.has(cc.id.toLowerCase()) || (cc.email && deletedIds.has(cc.email.toLowerCase()))) {
+          if (
+            isClientMarkedDeleted(cc.id, cc.email, cc.document, cc.name) ||
+            deletedIds.has(cc.id.toLowerCase()) ||
+            (cc.email && deletedIds.has(cc.email.toLowerCase()))
+          ) {
             continue;
           }
           const idx = combined.findIndex((x) => x.id === cc.id || (cc.email && x.email === cc.email));
@@ -694,9 +803,8 @@ END $$;
         }
       }
 
-      const activeDeletedIds = new Set(getStoredDeletedClientIds().map((x) => x.toLowerCase()));
       combined = combined.filter(
-        (c) => !activeDeletedIds.has(c.id.toLowerCase()) && (!c.email || !activeDeletedIds.has(c.email.toLowerCase()))
+        (c) => !isClientMarkedDeleted(c.id, c.email, c.document, c.name)
       );
 
       setExchangeClients(combined);
@@ -705,8 +813,9 @@ END $$;
       setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
     } catch (err: any) {
       console.warn('[Global Exchange] Sincronização em nuvem:', err);
-      const localReal = getStoredRealClients();
+      const localReal = getStoredRealClients().filter((c) => !isClientMarkedDeleted(c.id, c.email, c.document, c.name));
       setExchangeClients(localReal);
+      saveStoredRealClients(localReal);
       setLastSyncTime(new Date().toLocaleTimeString('pt-BR'));
     } finally {
       setIsLoadingClients(false);
@@ -899,43 +1008,52 @@ END $$;
     try {
       const storedClients = getStoredRealClients();
       const storedLedger = getStoredCustodyLedger();
+      const hasInitialized = localStorage.getItem('bitx_ge_clients_initialized') === 'true';
 
-      // Se ambos estiverem vazios, provisionar a conta de custódia corporativa Engecema com o registro auditado mestre CUST-001
-      if (storedClients.length === 0 && storedLedger.length === 0) {
-        const defaultClient: ExchangeClient = {
-          id: 'GX-CLI-0001',
-          name: 'Geoni Clementino Cesar de Matos',
-          email: 'geonimatos31@hotmail.com',
-          document: '707.813.383-87',
-          titleBadge: 'Titular Principal Engecema',
-          bitxAddress: 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
-          btxcBalance: 250.0,
-          brlBalance: 42385000.0,
-          usdtBalance: 8477000.0,
-          estimatedMarketValue: 105270385.0,
-          status: 'Institucional',
-          createdAt: new Date().toLocaleDateString('pt-BR'),
-        };
+      // APENAS provisionar dados padrão na primeiríssima execução E se o cliente padrão NÃO foi excluído pelo usuário!
+      if (!hasInitialized && storedClients.length === 0 && storedLedger.length === 0) {
+        if (!isClientMarkedDeleted('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387', 'Geoni Clementino Cesar de Matos')) {
+          const defaultClient: ExchangeClient = {
+            id: 'GX-CLI-0001',
+            name: 'Geoni Clementino Cesar de Matos',
+            email: 'geonimatos31@hotmail.com',
+            document: '707.813.383-87',
+            titleBadge: 'Titular Principal Engecema',
+            bitxAddress: 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
+            btxcBalance: 250.0,
+            brlBalance: 42385000.0,
+            usdtBalance: 8477000.0,
+            estimatedMarketValue: 105270385.0,
+            status: 'Institucional',
+            createdAt: new Date().toLocaleDateString('pt-BR'),
+          };
 
-        const defaultLedgerRecord: CustodyLedgerItem = {
-          id: 'CUST-001',
-          txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b29c9ef4f481e1a49',
-          clientId: 'GX-CLI-0001',
-          type: 'Aporte Inicial',
-          amountGx: 250.0,
-          amountBrl: 42385000.0,
-          counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
-          timestamp: new Date().toLocaleString('pt-BR'),
-          status: 'Confirmado em Custódia',
-        };
+          const defaultLedgerRecord: CustodyLedgerItem = {
+            id: 'CUST-001',
+            txid: '0x9891c2bfbee33952a01ceec868c4afb7f27e44341908a8b29c9ef4f481e1a49',
+            clientId: 'GX-CLI-0001',
+            type: 'Aporte Inicial',
+            amountGx: 250.0,
+            amountBrl: 42385000.0,
+            counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+            timestamp: new Date().toLocaleString('pt-BR'),
+            status: 'Confirmado em Custódia',
+          };
 
-        setExchangeClients([defaultClient]);
-        saveStoredRealClients([defaultClient]);
-        setCustodyLedger([defaultLedgerRecord]);
-        saveStoredCustodyLedger([defaultLedgerRecord]);
-        setSelectedCustodyClientId('GX-CLI-0001');
-      } else if (storedClients.length > 0 && (!selectedCustodyClientId || selectedCustodyClientId === '')) {
-        setSelectedCustodyClientId(storedClients[0].id);
+          setExchangeClients([defaultClient]);
+          saveStoredRealClients([defaultClient]);
+          setCustodyLedger([defaultLedgerRecord]);
+          saveStoredCustodyLedger([defaultLedgerRecord]);
+          setSelectedCustodyClientId('GX-CLI-0001');
+        }
+        localStorage.setItem('bitx_ge_clients_initialized', 'true');
+      } else {
+        localStorage.setItem('bitx_ge_clients_initialized', 'true');
+        if (storedClients.length > 0 && (!selectedCustodyClientId || selectedCustodyClientId === '')) {
+          setSelectedCustodyClientId(storedClients[0].id);
+        } else if (storedClients.length === 0) {
+          setSelectedCustodyClientId('');
+        }
       }
     } catch (e) {
       console.warn('[Inicialização Custódia & Clientes]:', e);
@@ -944,6 +1062,23 @@ END $$;
 
   // 1. ZERAR A LISTA DE CLIENTES DO PAINEL DAS CONFIGURAÇÕES
   const handleClearAllClients = () => {
+    // Registrar todos os clientes existentes e padrão como excluídos para nunca retornarem no F5
+    for (const c of exchangeClients) {
+      addStoredDeletedClientRecord({
+        id: c.id,
+        email: c.email,
+        document: c.document,
+        name: c.name,
+      });
+    }
+    addStoredDeletedClientRecord({
+      id: 'GX-CLI-0001',
+      email: 'geonimatos31@hotmail.com',
+      document: '70781338387',
+      name: 'Geoni Clementino Cesar de Matos',
+    });
+
+    localStorage.setItem('bitx_ge_clients_initialized', 'true');
     setExchangeClients([]);
     saveStoredRealClients([]);
     try {
@@ -977,11 +1112,14 @@ END $$;
         currentClients = getStoredRealClients();
       }
 
-      const deletedIds = new Set(getStoredDeletedClientIds().map((x) => x.toLowerCase()));
+      const deletedIds = new Set(getStoredDeletedClientIds().map((x: string) => x.toLowerCase()));
 
       // 1. Purificar a lista de clientes para garantir que NENHUM cliente removido esteja presente
       currentClients = currentClients.filter(
-        (c) => !deletedIds.has(c.id.toLowerCase()) && (!c.email || !deletedIds.has(c.email.toLowerCase()))
+        (c) =>
+          !isClientMarkedDeleted(c.id, c.email, c.document, c.name) &&
+          !deletedIds.has(c.id.toLowerCase()) &&
+          (!c.email || !deletedIds.has(c.email.toLowerCase()))
       );
 
       // 2. Purificar o Livro Razão de Custódia Engecema para que NUNCA contenha lançamentos de clientes excluídos
@@ -994,9 +1132,10 @@ END $$;
         const cpLower = (item.counterparty || '').toLowerCase();
 
         // Se pertencer a cliente deletado, descarta imediatamente
+        if (isClientMarkedDeleted(itemCid, undefined, undefined, cpLower)) return false;
         if (itemCid && deletedIds.has(itemCid)) return false;
         for (const dId of deletedIds) {
-          if (dId && cpLower.includes(dId)) return false;
+          if (dId && typeof dId === 'string' && cpLower.includes(dId)) return false;
         }
 
         // Se houver clientes ativos, o lançamento deve pertencer a um deles
@@ -1407,7 +1546,7 @@ END $$;
     };
 
     // Desbloquear ID e e-mail caso tenham sido excluídos previamente
-    clearStoredDeletedClientId(assignedId, newClientEmail);
+    clearStoredDeletedClientRecord(assignedId, newClientEmail, newClientDocument.trim());
 
     // 1. Salvar e ativar imediatamente no portal BitX Core & Global Exchange
     const updated = editingClient
@@ -1505,11 +1644,19 @@ END $$;
   const confirmDeleteRealClient = async () => {
     if (!clientToDelete) return;
     const { id, name, email } = clientToDelete;
+    const clientObj = exchangeClients.find((c) => c.id === id);
+    const doc = clientObj?.document;
     const idLower = id.toLowerCase();
     const emailLower = email?.toLowerCase();
 
-    // 1. Gravar nos identificadores de clientes excluídos para que nunca seja ressuscitado
-    addStoredDeletedClientId(id, email);
+    // 1. Gravar nos identificadores de clientes excluídos para que NUNCA seja ressuscitado em nenhum F5
+    addStoredDeletedClientRecord({
+      id,
+      email,
+      document: doc,
+      name,
+    });
+    localStorage.setItem('bitx_ge_clients_initialized', 'true');
 
     // 2. Remover do banco Supabase Cloud por id e por email
     try {
@@ -1522,7 +1669,7 @@ END $$;
     }
 
     // 3. Remover da Corretora Global Exchange e do Painel de Configurações
-    const remaining = exchangeClients.filter((c) => c.id !== id);
+    const remaining = exchangeClients.filter((c) => c.id !== id && (!email || c.email !== email));
     setExchangeClients(remaining);
     saveStoredRealClients(remaining);
     emitSyncToGlobalExchange(remaining);
