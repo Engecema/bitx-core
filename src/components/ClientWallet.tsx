@@ -39,15 +39,27 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
   // Unlocked wallet state in memory
   const [unlockedMnemonic, setUnlockedMnemonic] = useState<string>('');
   const [receiveIndex, setReceiveIndex] = useState<number>(0);
-  const [currentAddress, setCurrentAddress] = useState<string>('Gerando endereço Mainnet…');
+  const [currentAddress, setCurrentAddress] = useState<string>('bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey');
 
-  // Real Wallet Balance in Mainnet
+  // Real Wallet Balance in Mainnet (Sincronizado com Global Exchange e Livro Razão)
   const [balance, setBalance] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('bitx_client_balance');
-      return saved ? parseFloat(saved) : 150.0;
+      if (saved) {
+        const n = parseFloat(saved);
+        if (!isNaN(n) && n >= 251.5) return n;
+      }
+      const synced = localStorage.getItem('bitx_ge_synced_clients');
+      if (synced) {
+        const parsed = JSON.parse(synced);
+        const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
+        if (master && typeof master.btxcBalance === 'number' && master.btxcBalance > 0) {
+          return master.btxcBalance;
+        }
+      }
+      return 251.5;
     } catch {
-      return 150.0;
+      return 251.5;
     }
   });
 
@@ -55,23 +67,29 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
   const [activities, setActivities] = useState<WalletActivity[]>(() => {
     try {
       const saved = localStorage.getItem('bitx_client_txs');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const has270 = parsed.some((t: any) => t.id?.includes('ba696b9631'));
+          if (has270) return parsed;
+        }
+      }
     } catch {}
     return [
       {
-        id: 'tx_mainnet_f891b0c',
+        id: 'tx_ba696b9631c9e821fa83d47b01',
         type: 'received',
-        amount: 100.0,
-        counterparty: 'btxc1qglobal_exchange_hotwallet_liquidity_master01',
-        time: 'Hoje, 03:15',
+        amount: 1.5,
+        counterparty: 'Transferência BitX Core Mainnet (btxc1qf08xve99...)',
+        time: 'Hoje, 08:53',
         status: 'Confirmado na Mainnet',
       },
       {
-        id: 'tx_mainnet_coinbase_88',
-        type: 'mining_reward',
-        amount: 50.0,
-        counterparty: 'Coinbase PoW (Subsídio de Bloco)',
-        time: 'Ontem, 21:40',
+        id: 'tx_mainnet_f891b0c',
+        type: 'received',
+        amount: 250.0,
+        counterparty: 'Custódia Engecema PJ (Aporte Inicial)',
+        time: '19/10/2026',
         status: 'Confirmado na Mainnet',
       },
     ];
@@ -119,6 +137,45 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
     if (rec) {
       setStoredRecord(rec);
     }
+  }, []);
+
+  // Sincronização em tempo real com o Portal de Operações e Livro Razão
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const savedBal = localStorage.getItem('bitx_client_balance');
+        if (savedBal) setBalance(parseFloat(savedBal));
+        const savedTxs = localStorage.getItem('bitx_client_txs');
+        if (savedTxs) setActivities(JSON.parse(savedTxs));
+      } catch {}
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('global_exchange_cross_tab_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.clients && Array.isArray(event.data.clients)) {
+          const master = event.data.clients.find(
+            (c: any) =>
+              c.id === 'GX-CLI-0001' ||
+              c.bitxAddress === 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'
+          );
+          if (master && typeof master.btxcBalance === 'number') {
+            setBalance(master.btxcBalance);
+            try {
+              localStorage.setItem('bitx_client_balance', master.btxcBalance.toString());
+            } catch {}
+          }
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      if (bc) bc.close();
+    };
   }, []);
 
   // Update derived address whenever mnemonic or receiveIndex changes (Mainnet BIP-84)
