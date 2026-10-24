@@ -571,3 +571,16 @@
   margin-bottom: 16px;
 }
 
+.clients-grid-responsive {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 350px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .clients-grid-responsive {
+    grid-template-columns: 1fr;
+  }
+}
+

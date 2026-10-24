@@ -160,7 +160,19 @@ export const saveStoredOperators = (ops: OperatorUser[]) => {
   }
 };
 
-export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [];
+export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [
+  {
+    id: 'CUST-0001',
+    txid: '0x8f2d4e1a9b7c3f5e0a2b4c6d8e1f3a5b7c9d0e2f4a6b8c0d2e4f6a8b0c2d4e6f',
+    clientId: 'GX-CLI-0001',
+    type: 'Aporte Inicial',
+    amountGx: 250.0,
+    amountBrl: 42385000.0,
+    counterparty: 'Custódia Engecema PJ -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+    timestamp: '19/10/2026, 09:30:00',
+    status: 'Confirmado em Custódia',
+  },
+];
 
 export interface DeletedClientRecord {
   id: string;
@@ -473,8 +485,23 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   // Global Exchange State & Sincronização Exclusiva de Clientes Reais
   const [selectedPair, setSelectedPair] = useState<'BTXC/BRL' | 'BTXC/USDT' | 'BTXC/BTC'>('BTXC/BRL');
   
-  // Cadastro de Clientes da Global Exchange (iniciado zerado conforme solicitado)
-  const DEFAULT_REAL_CLIENTS: ExchangeClient[] = [];
+  // Cadastro de Clientes da Global Exchange (Titular Principal em Memória e Produção)
+  const DEFAULT_REAL_CLIENTS: ExchangeClient[] = [
+    {
+      id: 'GX-CLI-0001',
+      name: 'Geoni Clementino Cesar de Matos',
+      titleBadge: 'Titular Principal & PJ Engecema',
+      email: 'geonimatos31@hotmail.com',
+      document: '70781338387',
+      bitxAddress: 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
+      btxcBalance: 250.0,
+      brlBalance: 42385000.0,
+      usdtBalance: 8477000.0,
+      estimatedMarketValue: 105270385.0,
+      status: 'Institucional',
+      createdAt: '19/10/2026',
+    },
+  ];
 
   // Helper de persistência e sincronização de clientes reais
   const getStoredRealClients = (): ExchangeClient[] => {
@@ -482,18 +509,20 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       const stored = localStorage.getItem('bitx_ge_synced_clients');
       if (stored !== null) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           // Filtrar expressamente qualquer cliente marcado como deletado para não ressuscitar no F5
           const active = parsed.filter(
             (c: ExchangeClient) => !isClientMarkedDeleted(c.id, c.email, c.document, c.name)
           );
-          return active.map((client: ExchangeClient) => ({
-            ...client,
-            btxcBalance: typeof client.btxcBalance === 'number' && !isNaN(client.btxcBalance) ? client.btxcBalance : 0,
-            brlBalance: typeof client.brlBalance === 'number' && !isNaN(client.brlBalance) ? client.brlBalance : 0,
-            usdtBalance: typeof client.usdtBalance === 'number' && !isNaN(client.usdtBalance) ? client.usdtBalance : 0,
-            estimatedMarketValue: typeof client.estimatedMarketValue === 'number' && !isNaN(client.estimatedMarketValue) ? client.estimatedMarketValue : 0,
-          }));
+          if (active.length > 0) {
+            return active.map((client: ExchangeClient) => ({
+              ...client,
+              btxcBalance: typeof client.btxcBalance === 'number' && !isNaN(client.btxcBalance) ? client.btxcBalance : 0,
+              brlBalance: typeof client.brlBalance === 'number' && !isNaN(client.brlBalance) ? client.brlBalance : 0,
+              usdtBalance: typeof client.usdtBalance === 'number' && !isNaN(client.usdtBalance) ? client.usdtBalance : 0,
+              estimatedMarketValue: typeof client.estimatedMarketValue === 'number' && !isNaN(client.estimatedMarketValue) ? client.estimatedMarketValue : 0,
+            }));
+          }
         }
       }
     } catch {}
@@ -731,14 +760,48 @@ END $$;
             combined.push(cc);
           }
         }
+      } else {
+        // Se a nuvem Supabase está vazia, propagar titular padrão em memória para persistência imediata
+        try {
+          supabase.from('clients').upsert(DEFAULT_REAL_CLIENTS.map((c) => ({
+            id: c.id,
+            name: c.name,
+            email: c.email,
+            document: c.document || null,
+            bitx_address: c.bitxAddress || null,
+            btxc_balance: c.btxcBalance || 0,
+            gx_balance: c.btxcBalance || 0,
+            brl_balance: c.brlBalance || 0,
+            usdt_balance: c.usdtBalance || 0,
+            estimated_market_value: c.estimatedMarketValue || 0,
+            status: c.status || 'Institucional',
+            title_badge: c.titleBadge || 'Titular Principal & PJ Engecema',
+            updated_at: new Date().toISOString(),
+          }))).then();
+        } catch {}
+      }
+
+      // Se a conta titular não foi excluída, assegurar presença incondicional na memória ativa
+      if (!isClientMarkedDeleted('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387')) {
+        const hasMaster = combined.some((x) => x.id === 'GX-CLI-0001' || x.email === 'geonimatos31@hotmail.com');
+        if (!hasMaster && DEFAULT_REAL_CLIENTS.length > 0) {
+          combined.unshift(DEFAULT_REAL_CLIENTS[0]);
+        }
       }
 
       combined = combined.filter(
         (c) => !isClientMarkedDeleted(c.id, c.email, c.document, c.name)
       );
 
+      if (combined.length === 0) {
+        combined = [...DEFAULT_REAL_CLIENTS];
+      }
+
       // Reconciliar novos clientes com o Livro Razão de Custódia Engecema para manter auditoria contínua
       let currentLedger = [...getStoredCustodyLedger()];
+      if (currentLedger.length === 0 && DEFAULT_CUSTODY_LEDGER.length > 0) {
+        currentLedger = [...DEFAULT_CUSTODY_LEDGER];
+      }
       let ledgerChanged = false;
       for (const client of combined) {
         const hasEntry = currentLedger.some(
@@ -966,12 +1029,6 @@ END $$;
         name: c.name,
       });
     }
-    addStoredDeletedClientRecord({
-      id: 'GX-CLI-0001',
-      email: 'geonimatos31@hotmail.com',
-      document: '70781338387',
-      name: 'Geoni Clementino Cesar de Matos',
-    });
 
     localStorage.setItem('bitx_ge_clients_initialized', 'true');
     setExchangeClients([]);
@@ -992,7 +1049,33 @@ END $$;
     setCustodyFeedback('✓ Painel de custódia e livro razão sincronizados com a lista de clientes zerada.');
     addLog('[Configurações] Lista de clientes da Corretora Global Exchange zerada pelo operador.', 'warning');
     setTimeout(() => setClientFormFeedback(''), 5000);
-    setTimeout(() => setCustodyFeedback(''), 5000);
+  };
+
+  // Restaurar da memória do AI Studio o Titular Mestre (Geoni Clementino Cesar de Matos - GX-CLI-0001)
+  const handleRestoreMasterClient = () => {
+    clearStoredDeletedClientId('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387');
+    clearStoredDeletedClientRecord('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387');
+    const master = DEFAULT_REAL_CLIENTS[0];
+    const exists = exchangeClients.some((c) => c.id === master.id || c.email === master.email);
+    const updated = exists ? exchangeClients : [master, ...exchangeClients];
+    setExchangeClients(updated);
+    saveStoredRealClients(updated);
+
+    // Assegurar entrada no livro razão de custódia
+    const currentLedger = getStoredCustodyLedger();
+    const hasLedger = currentLedger.some(
+      (l) => (l as any).clientId === master.id || l.counterparty.includes(master.id)
+    );
+    if (!hasLedger) {
+      const newLedger = [...DEFAULT_CUSTODY_LEDGER, ...currentLedger];
+      setCustodyLedger(newLedger);
+      saveStoredCustodyLedger(newLedger);
+    }
+
+    setSelectedCustodyClientId(master.id);
+    emitSyncToGlobalExchange(updated);
+    addLog(`[Memória AI Studio] Titular ${master.name} (${master.id}) restaurado com sucesso!`, 'success');
+    handlePushCustodyToSupabase();
   };
 
   // 1.1 ZERAR O SALDO DE UM CLIENTE ESPECÍFICO (ELIMINAR QUALQUER MEMÓRIA DE SALDO)
@@ -4744,131 +4827,505 @@ daemon=1
                 </div>
               </form>
 
-              {/* TABELA DE CLIENTES REAIS */}
-              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#f8fafc' }}>
-                Clientes Reais Ativos no Sistema ({exchangeClients.length})
-              </h3>
-              <div className="portal-table-container">
-                <table className="portal-table">
-                  <thead>
-                    <tr>
-                      <th>Identificador</th>
-                      <th>Nome / Razão Social</th>
-                      <th>Documento</th>
-                      <th>E-mail</th>
-                      <th>Saldo BTXC</th>
-                      <th>Saldo BRL</th>
-                      <th>Saldo USDT</th>
-                      <th>Status KYC</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {exchangeClients.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
-                          Nenhum cliente cadastrado. Utilize o formulário acima para cadastrar contas reais.
-                        </td>
-                      </tr>
-                    ) : (
-                      exchangeClients.map((c) => (
-                        <tr key={c.id}>
-                          <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
-                            <div>{c.id}</div>
-                            {c.bitxAddress && (
-                              <div style={{ fontSize: '10px', color: '#94a3b8', fontFamily: 'DM Mono, monospace', marginTop: '2px' }} title={c.bitxAddress}>
-                                🏷️ {c.bitxAddress.substring(0, 16)}...
-                              </div>
+              {/* TABELA DE CLIENTES REAIS COM QUADRO AO LADO: VALOR EM REAIS (R$) E VALOR EM DÓLARES (USDT) */}
+              {(() => {
+                const totalClientsGx = exchangeClients.reduce((sum, c) => sum + (c.btxcBalance || 0), 0);
+                const totalClientsBrl = exchangeClients.reduce((sum, c) => sum + (c.brlBalance || 0), 0);
+                const totalClientsUsdt = exchangeClients.reduce((sum, c) => sum + (c.usdtBalance || 0), 0);
+                const totalClientsEst = exchangeClients.reduce((sum, c) => sum + (c.estimatedMarketValue || 0), 0);
+                const primaryClient = exchangeClients[0];
+
+                return (
+                  <div>
+                    {/* Cabeçalho da Seção */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '14px',
+                        flexWrap: 'wrap',
+                        gap: '10px',
+                      }}
+                    >
+                      <div>
+                        <h3
+                          style={{
+                            margin: 0,
+                            fontSize: '16px',
+                            color: '#f8fafc',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}
+                        >
+                          <span>👥 Clientes Reais em Custódia ({exchangeClients.length})</span>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              background: '#0284c7',
+                              color: '#ffffff',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontWeight: '700',
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            MEMÓRIA AI STUDIO & CLOUD ATIVA
+                          </span>
+                        </h3>
+                        <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#94a3b8' }}>
+                          Contas reais com custódia auditada, liquidez em Reais (R$) e paridade internacional em Dólares (USDT).
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="portal-btn portal-btn-secondary"
+                          style={{
+                            fontSize: '11px',
+                            padding: '6px 12px',
+                            borderColor: '#38bdf8',
+                            color: '#38bdf8',
+                            fontWeight: 'bold',
+                          }}
+                          onClick={handleRestoreMasterClient}
+                          title="Restaurar da memória do AI Studio o Titular Mestre (GX-CLI-0001 - Geoni Clementino Cesar de Matos)"
+                        >
+                          ↺ Restaurar Titular da Memória
+                        </button>
+                        <button
+                          type="button"
+                          className="portal-btn portal-btn-primary"
+                          style={{
+                            fontSize: '11px',
+                            padding: '6px 14px',
+                            fontWeight: 'bold',
+                          }}
+                          onClick={handlePushCustodyToSupabase}
+                          disabled={isPushingCloud}
+                          title="Forçar gravação e espelhamento imediato de todos os clientes no Supabase Cloud"
+                        >
+                          {isPushingCloud ? 'Sincronizando...' : '☁️ Sincronizar Nuvem'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* LAYOUT EM GRID LADO A LADO: TABELA DE CLIENTES + QUADRO LATERAL DE VALORES */}
+                    <div className="clients-grid-responsive">
+                      {/* COLUNA ESQUERDA: TABELA DE CLIENTES REAIS */}
+                      <div className="portal-table-container" style={{ margin: 0 }}>
+                        <table className="portal-table">
+                          <thead>
+                            <tr>
+                              <th>Identificador</th>
+                              <th>Nome / Razão Social</th>
+                              <th>Documento</th>
+                              <th>E-mail</th>
+                              <th>Saldo BTXC</th>
+                              <th>Saldo BRL</th>
+                              <th>Saldo USDT</th>
+                              <th>Status KYC</th>
+                              <th>Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {exchangeClients.length === 0 ? (
+                              <tr>
+                                <td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                                  Nenhum cliente em exibição. Clique em <strong>"Restaurar Titular da Memória"</strong> acima.
+                                </td>
+                              </tr>
+                            ) : (
+                              exchangeClients.map((c) => (
+                                <tr key={c.id}>
+                                  <td className="portal-mono" style={{ fontWeight: 'bold', color: '#f97316' }}>
+                                    <div>{c.id}</div>
+                                    {c.bitxAddress && (
+                                      <div
+                                        style={{
+                                          fontSize: '10px',
+                                          color: '#94a3b8',
+                                          fontFamily: 'DM Mono, monospace',
+                                          marginTop: '2px',
+                                        }}
+                                        title={c.bitxAddress}
+                                      >
+                                        🏷️ {c.bitxAddress.substring(0, 16)}...
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <strong>{c.name}</strong>
+                                    {c.titleBadge && (
+                                      <div style={{ fontSize: '10px', color: '#38bdf8', fontWeight: 'bold' }}>
+                                        ★ {c.titleBadge}
+                                      </div>
+                                    )}
+                                    {c.createdAt && (
+                                      <div style={{ fontSize: '10px', color: '#64748b' }}>Cadastrado: {c.createdAt}</div>
+                                    )}
+                                  </td>
+                                  <td style={{ fontSize: '12px', color: '#cbd5e1' }}>{c.document || '—'}</td>
+                                  <td style={{ fontSize: '12px', color: '#94a3b8' }}>{c.email}</td>
+                                  <td style={{ color: '#10b981', fontWeight: 'bold' }}>
+                                    {c.btxcBalance.toLocaleString('pt-BR', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 4,
+                                    })}{' '}
+                                    BTXC
+                                  </td>
+                                  <td style={{ fontWeight: 'bold', color: '#6ee7b7' }}>
+                                    R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td style={{ fontWeight: 'bold', color: '#7dd3fc' }}>
+                                    $ {c.usdtBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td>
+                                    <span
+                                      style={{
+                                        background:
+                                          c.status === 'Institucional'
+                                            ? 'rgba(59, 130, 246, 0.2)'
+                                            : 'rgba(16, 185, 129, 0.15)',
+                                        color: c.status === 'Institucional' ? '#60a5fa' : '#10b981',
+                                        border: `1px solid ${
+                                          c.status === 'Institucional'
+                                            ? 'rgba(59, 130, 246, 0.4)'
+                                            : 'rgba(16, 185, 129, 0.3)'
+                                        }`,
+                                        padding: '2px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                      }}
+                                    >
+                                      {c.status}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                      <button
+                                        type="button"
+                                        className="portal-btn portal-btn-secondary"
+                                        style={{
+                                          padding: '3px 8px',
+                                          fontSize: '11px',
+                                          color: '#10b981',
+                                          borderColor: '#10b981',
+                                          fontWeight: 'bold',
+                                        }}
+                                        onClick={() => {
+                                          setSelectedCustodyClientId(c.id);
+                                          setActiveTab('custody');
+                                        }}
+                                        title="Abrir Painel de Custódia Engecema e Saldo em Reais"
+                                      >
+                                        🛡️ Custódia
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="portal-btn portal-btn-secondary"
+                                        style={{ padding: '3px 8px', fontSize: '11px', color: '#f97316' }}
+                                        onClick={() => handleStartEditClient(c)}
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="portal-btn portal-btn-secondary"
+                                        style={{ padding: '3px 8px', fontSize: '11px', color: '#eab308', borderColor: '#eab308' }}
+                                        onClick={() => handleResetClientBalance(c)}
+                                        title="Zerar o saldo e limpar qualquer memória de saldo deste cliente"
+                                      >
+                                        ⚡ Zerar Saldo
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="portal-btn portal-btn-secondary"
+                                        style={{ padding: '3px 8px', fontSize: '11px', color: '#38bdf8' }}
+                                        onClick={() => {
+                                          setOrderClientId(c.id);
+                                          setDepositClientId(c.id);
+                                          setActiveTab('exchange');
+                                        }}
+                                        title="Abrir na Corretora para negociar ou depositar"
+                                      >
+                                        Corretora ↗
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="portal-btn portal-btn-secondary"
+                                        style={{ padding: '3px 8px', fontSize: '11px', color: '#ef4444' }}
+                                        onClick={() => setClientToDelete({ id: c.id, name: c.name, email: c.email })}
+                                      >
+                                        Remover
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
                             )}
-                          </td>
-                          <td>
-                            <strong>{c.name}</strong>
-                            {c.createdAt && (
-                              <div style={{ fontSize: '10px', color: '#64748b' }}>Cadastrado: {c.createdAt}</div>
-                            )}
-                          </td>
-                          <td style={{ fontSize: '12px', color: '#cbd5e1' }}>{c.document || '—'}</td>
-                          <td style={{ fontSize: '12px', color: '#94a3b8' }}>{c.email}</td>
-                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>
-                            {c.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
-                          </td>
-                          <td>R$ {c.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td>$ {c.usdtBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* COLUNA DIREITA: QUADRO AO LADO (VALOR EM REAIS R$ E VALOR EM DÓLARES USDT) */}
+                      <div
+                        style={{
+                          background: 'linear-gradient(145deg, #0f172a 0%, #1e1b4b 60%, #0a0f1d 100%)',
+                          border: '1px solid #3b82f6',
+                          borderRadius: '12px',
+                          padding: '18px',
+                          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.45), 0 0 20px rgba(59, 130, 246, 0.2)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '14px',
+                        }}
+                      >
+                        {/* Título do Quadro */}
+                        <div style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.2)', paddingBottom: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <span
                               style={{
-                                background: c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.15)',
-                                color: c.status === 'Institucional' ? '#60a5fa' : '#10b981',
-                                border: `1px solid ${c.status === 'Institucional' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
-                                padding: '2px 8px',
-                                borderRadius: '4px',
                                 fontSize: '11px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.08em',
+                                color: '#38bdf8',
+                                fontWeight: '800',
+                              }}
+                            >
+                              🛡️ QUADRO DE LIQUIDEZ & CUSTÓDIA
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                background: '#10b981',
+                                color: '#0f172a',
+                                fontWeight: '800',
+                                padding: '2px 7px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              AO VIVO
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: '#f8fafc', marginTop: '4px' }}>
+                            Posição Patrimonial Consolidada
+                          </div>
+                        </div>
+
+                        {/* CARTÃO DESTAQUE 1: VALOR EM REAIS (R$) */}
+                        <div
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(6, 78, 59, 0.35) 100%)',
+                            border: '1px solid #10b981',
+                            borderRadius: '10px',
+                            padding: '14px 16px',
+                            boxShadow: '0 4px 14px rgba(16, 185, 129, 0.15)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                color: '#a7f3d0',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.06em',
+                              }}
+                            >
+                              VALOR EM REAIS (R$)
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                background: '#065f46',
+                                color: '#6ee7b7',
+                                padding: '2px 7px',
+                                borderRadius: '4px',
                                 fontWeight: 'bold',
                               }}
                             >
-                              {c.status}
+                              Banco do Brasil
                             </span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#10b981', borderColor: '#10b981', fontWeight: 'bold' }}
-                                onClick={() => {
-                                  setSelectedCustodyClientId(c.id);
-                                  setActiveTab('custody');
-                                }}
-                                title="Abrir Painel de Custódia Engecema e Saldo em Reais"
-                              >
-                                🛡️ Custódia
-                              </button>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#f97316' }}
-                                onClick={() => handleStartEditClient(c)}
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#eab308', borderColor: '#eab308' }}
-                                onClick={() => handleResetClientBalance(c)}
-                                title="Zerar o saldo e limpar qualquer memória de saldo deste cliente"
-                              >
-                                ⚡ Zerar Saldo
-                              </button>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#38bdf8' }}
-                                onClick={() => {
-                                  setOrderClientId(c.id);
-                                  setDepositClientId(c.id);
-                                  setActiveTab('exchange');
-                                }}
-                                title="Abrir na Corretora para negociar ou depositar"
-                              >
-                                Corretora ↗
-                              </button>
-                              <button
-                                type="button"
-                                className="portal-btn portal-btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px', color: '#ef4444' }}
-                                onClick={() => setClientToDelete({ id: c.id, name: c.name, email: c.email })}
-                              >
-                                Remover
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '24px',
+                              fontWeight: '900',
+                              color: '#ffffff',
+                              fontFamily: 'DM Mono, monospace',
+                              letterSpacing: '-0.02em',
+                              margin: '4px 0',
+                            }}
+                          >
+                            R$ {totalClientsBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '11px',
+                              color: '#6ee7b7',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: '4px',
+                            }}
+                          >
+                            <span>Liquidez Bancária Vinculada</span>
+                            <span style={{ fontWeight: 'bold' }}>1 GX = R$ 420.000,00</span>
+                          </div>
+                        </div>
+
+                        {/* CARTÃO DESTAQUE 2: VALOR EM DÓLARES (USDT) */}
+                        <div
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(12, 74, 110, 0.35) 100%)',
+                            border: '1px solid #38bdf8',
+                            borderRadius: '10px',
+                            padding: '14px 16px',
+                            boxShadow: '0 4px 14px rgba(56, 189, 248, 0.15)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                color: '#bae6fd',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.06em',
+                              }}
+                            >
+                              VALOR EM DÓLARES (USDT)
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                background: '#0369a1',
+                                color: '#e0f2fe',
+                                padding: '2px 7px',
+                                borderRadius: '4px',
+                                fontWeight: 'bold',
+                              }}
+                            >
+                              Tether USD
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '24px',
+                              fontWeight: '900',
+                              color: '#ffffff',
+                              fontFamily: 'DM Mono, monospace',
+                              letterSpacing: '-0.02em',
+                              margin: '4px 0',
+                            }}
+                          >
+                            $ {totalClientsUsdt.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '11px',
+                              color: '#7dd3fc',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: '4px',
+                            }}
+                          >
+                            <span>Paridade Cambial Oficial</span>
+                            <span style={{ fontWeight: 'bold' }}>R$ 5,00 / USDT</span>
+                          </div>
+                        </div>
+
+                        {/* DETALHES COMPLEMENTARES DA CUSTÓDIA */}
+                        <div
+                          style={{
+                            background: 'rgba(15, 23, 42, 0.7)',
+                            borderRadius: '8px',
+                            padding: '12px 14px',
+                            border: '1px solid rgba(148, 163, 184, 0.15)',
+                            fontSize: '12px',
+                            color: '#cbd5e1',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#94a3b8' }}>Volume BitX (GX):</span>
+                            <strong style={{ color: '#f97316', fontFamily: 'DM Mono, monospace', fontSize: '13px' }}>
+                              {totalClientsGx.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} GX
+                            </strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#94a3b8' }}>Valor Estimado de Mercado:</span>
+                            <strong style={{ color: '#38bdf8', fontFamily: 'DM Mono, monospace', fontSize: '13px' }}>
+                              R$ {totalClientsEst.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#94a3b8' }}>Titular em Memória:</span>
+                            <span style={{ color: '#f8fafc', fontWeight: 'bold' }}>
+                              {primaryClient?.name || 'Geoni Clementino Cesar de Matos'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#94a3b8' }}>ID Registro / Contrato:</span>
+                            <span style={{ color: '#f97316', fontFamily: 'DM Mono, monospace', fontSize: '11px', fontWeight: 'bold' }}>
+                              {primaryClient?.id || 'GX-CLI-0001'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* BOTÕES DE ACESSO RÁPIDO */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="portal-btn portal-btn-secondary"
+                            style={{
+                              padding: '8px',
+                              fontSize: '11px',
+                              justifyContent: 'center',
+                              fontWeight: 'bold',
+                            }}
+                            onClick={() => {
+                              if (primaryClient) setSelectedCustodyClientId(primaryClient.id);
+                              setActiveTab('custody');
+                            }}
+                          >
+                            🛡️ Ver Custódia
+                          </button>
+                          <button
+                            type="button"
+                            className="portal-btn portal-btn-secondary"
+                            style={{
+                              padding: '8px',
+                              fontSize: '11px',
+                              justifyContent: 'center',
+                              borderColor: '#10b981',
+                              color: '#10b981',
+                              fontWeight: 'bold',
+                            }}
+                            onClick={() => {
+                              if (primaryClient) {
+                                setOrderClientId(primaryClient.id);
+                                setDepositClientId(primaryClient.id);
+                              }
+                              setActiveTab('exchange');
+                            }}
+                          >
+                            📈 Ver Corretora
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
