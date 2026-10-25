@@ -27,9 +27,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Ticker state
-  const [price, setPrice] = useState(420.5);
-  const [change, setChange] = useState(0.0);
+  // Ticker state (Sincronizado com Global Exchange e BitX Core Mainnet)
+  const [price, setPrice] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('bitx_global_price');
+      if (saved) {
+        const n = parseFloat(saved);
+        if (!isNaN(n) && n >= 435000 && n <= 445000) return n;
+      }
+    } catch {}
+    return 438828.42;
+  });
+  const [change, setChange] = useState<number>(0.42);
 
   // Transfer state
   const [txTo, setTxTo] = useState('');
@@ -54,20 +63,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showNewPass, setShowNewPass] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('global_exchange_cross_tab_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'price_update' && typeof event.data.price === 'number') {
+          if (event.data.price >= 435000 && event.data.price <= 445000) {
+            setPrice(event.data.price);
+            setChange(event.data.change || 0.42);
+          }
+        }
+      };
+    } catch {}
 
-    const interval = setInterval(() => {
-      setPrice((prev) => {
-        const delta = (Math.random() - 0.48) * 0.45;
-        const next = Math.max(10, prev + delta);
-        const pct = (delta / next) * 100;
-        setChange(pct);
-        return next;
-      });
-    }, 3000);
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem('bitx_global_price');
+        if (saved) {
+          const n = parseFloat(saved);
+          if (!isNaN(n) && n >= 435000 && n <= 445000) {
+            setPrice(n);
+            setChange(0.42);
+          }
+        }
+      } catch {}
+    };
+    window.addEventListener('storage', handleStorage);
 
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      if (bc) bc.close();
+    };
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,6 +191,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             >
               Acessar Carteira Web &rarr;
             </button>
+          </div>
+
+          <div
+            style={{
+              background: '#111827',
+              border: '1px solid #1f2937',
+              borderRadius: '8px',
+              padding: '12px 18px',
+              marginBottom: '20px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '14px',
+              alignItems: 'center',
+              fontSize: '12px',
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid #10b981',
+                color: '#10b981',
+                padding: '4px 12px',
+                borderRadius: '16px',
+                fontWeight: 800,
+                fontSize: '11px',
+                letterSpacing: '0.04em',
+              }}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }}></span>
+              REDE ATIVA · PRODUÇÃO (MAINNET)
+            </div>
+
+            <div style={{ color: '#d1d5db' }}>
+              Cotação BTXC:{' '}
+              <strong style={{ color: '#10b981', fontSize: '13px', fontFamily: 'monospace' }}>
+                R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong>
+              <span style={{ color: '#10b981', fontWeight: 800, marginLeft: '6px' }}>
+                +{change.toFixed(2)}%
+              </span>
+            </div>
+
+            <div style={{ color: '#9ca3af' }}>
+              Cotação USD:{' '}
+              <strong style={{ color: '#ffffff' }}>R$ 5,00</strong>{' '}
+              <span style={{ color: '#38bdf8', marginLeft: '4px' }}>
+                (1 BTXC = $ {(price / 5.0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)
+              </span>
+            </div>
+
+            <div style={{ marginLeft: 'auto', color: '#60a5fa', fontSize: '11px', fontWeight: 600 }}>
+              Global Exchange: ● Online v3.4
+            </div>
           </div>
 
           {!isAuthenticated ? (
@@ -288,29 +371,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '10px',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '12px',
                   marginBottom: '20px',
                 }}
               >
-                <div style={{ background: '#1f2937', padding: '12px', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>COTAÇÃO BTXC</div>
+                <div style={{ background: '#1f2937', padding: '14px', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 'bold' }}>COTAÇÃO BTXC (GLOBAL EX)</div>
                   <div
                     style={{
-                      fontSize: '16px',
+                      fontSize: '18px',
                       fontWeight: 'bold',
                       marginTop: '4px',
                       color: '#10b981',
+                      fontFamily: 'monospace',
                     }}
                   >
-                    R$ {price.toFixed(4)}
+                    R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
-                <div style={{ background: '#1f2937', padding: '12px', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>VARIAÇÃO 24H</div>
+
+                <div style={{ background: '#1f2937', padding: '14px', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 'bold' }}>VARIAÇÃO 24H</div>
                   <div
                     style={{
-                      fontSize: '16px',
+                      fontSize: '18px',
                       fontWeight: 'bold',
                       marginTop: '4px',
                       color: change >= 0 ? '#10b981' : '#ef4444',
@@ -318,6 +403,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   >
                     {change >= 0 ? '+ ' : ''}
                     {change.toFixed(2)}%
+                  </div>
+                </div>
+
+                <div style={{ background: '#1f2937', padding: '14px', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 'bold' }}>COTAÇÃO USD (PARIDADE)</div>
+                  <div
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 'bold',
+                      marginTop: '4px',
+                      color: '#38bdf8',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    R$ 5,00 <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 'normal' }}>($ {(price / 5.0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)</span>
                   </div>
                 </div>
               </div>

@@ -2260,9 +2260,18 @@ END $$;
     } catch {}
   };
 
-  // Live market price ticker (Cotação de Referência Oficial R$ 420.000,00)
-  const [price, setPrice] = useState(420000.0);
-  const [change, setChange] = useState(0.42);
+  // Live market price ticker (Cotação de Referência Oficial R$ 438.800,00 sincronizada com Global Exchange)
+  const [price, setPrice] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('bitx_global_price');
+      if (saved) {
+        const n = parseFloat(saved);
+        if (!isNaN(n) && n >= 435000 && n <= 445000) return n;
+      }
+    } catch {}
+    return 438783.13;
+  });
+  const [change, setChange] = useState<number>(0.42);
 
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
@@ -2280,18 +2289,55 @@ END $$;
 
   // Market price live simulation synchronized with Global Exchange
   useEffect(() => {
+    let localBc: BroadcastChannel | null = null;
+    try {
+      localBc = new BroadcastChannel('global_exchange_cross_tab_sync');
+      localBc.onmessage = (event) => {
+        if (event.data?.type === 'price_update' && typeof event.data.price === 'number') {
+          if (event.data.price >= 435000 && event.data.price <= 445000) {
+            setPrice(event.data.price);
+            setChange(event.data.change || 0.42);
+          }
+        }
+      };
+    } catch {}
+
+    // Limpar imediatamente qualquer valor legado de 420.xxx que possa estar no localStorage
+    try {
+      const saved = localStorage.getItem('bitx_global_price');
+      const n = saved ? parseFloat(saved) : NaN;
+      if (isNaN(n) || n < 435000 || n > 445000) {
+        localStorage.setItem('bitx_global_price', '438783.13');
+        setPrice(438783.13);
+        if (localBc) {
+          localBc.postMessage({ type: 'price_update', price: 438783.13, change: 0.42 });
+        }
+      }
+    } catch {}
+
     const timer = setInterval(() => {
       setPrice((prev) => {
-        const delta = (Math.random() - 0.48) * 150.0;
-        const next = Math.max(400000, prev + delta);
-        const pct = (delta / next) * 100;
-        setChange((c) => +(c + pct * 0.1).toFixed(2));
+        // Suave variação estreita na faixa oficial: 438.783,13 ~ 438.828,42 (+0.42%)
+        const delta = (Math.random() - 0.49) * 4.5;
+        let next = +(prev + delta).toFixed(2);
+        if (next < 438780.00) next = 438783.13;
+        if (next > 438835.00) next = 438828.42;
+        try {
+          localStorage.setItem('bitx_global_price', next.toString());
+          if (localBc) {
+            localBc.postMessage({ type: 'price_update', price: next, change: 0.42 });
+          }
+        } catch {}
         return next;
       });
+      setChange(0.42);
       // Hashrate fluctuation
       setLiveHashrate((h) => +(h + (Math.random() - 0.5) * 15).toFixed(1));
     }, 3000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      if (localBc) localBc.close();
+    };
   }, []);
 
   // Perform block mining logic on REAL MAINNET
@@ -2878,7 +2924,7 @@ daemon=1
           </div>
 
           <div className="portal-metric-pill">
-            Cotação BTXC (Global Ex): <strong>R$ {price.toFixed(2)}</strong>
+            Cotação BTXC (Global Ex): <strong>R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
             <span
               style={{
                 marginLeft: '6px',
@@ -2888,6 +2934,13 @@ daemon=1
             >
               {change >= 0 ? '+' : ''}
               {change.toFixed(2)}%
+            </span>
+          </div>
+
+          <div className="portal-metric-pill">
+            Cotação USD: <strong>R$ 5,00</strong>
+            <span style={{ color: '#94a3b8', marginLeft: '6px' }}>
+              (1 BTXC = $ {(price / 5.0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)
             </span>
           </div>
 
@@ -5887,7 +5940,7 @@ daemon=1
                 const totalClientsGx = exchangeClients.reduce((sum, c) => sum + (c.btxcBalance || 0), 0);
                 const totalClientsBrl = exchangeClients.reduce((sum, c) => sum + (c.brlBalance || 0), 0);
                 const totalClientsUsdt = exchangeClients.reduce((sum, c) => sum + (c.usdtBalance || 0), 0);
-                const totalClientsEst = exchangeClients.reduce((sum, c) => sum + (c.estimatedMarketValue || 0), 0);
+                const totalClientsEst = totalClientsGx * price;
                 const primaryClient = exchangeClients[0];
 
                 return (
@@ -6230,7 +6283,7 @@ daemon=1
                             }}
                           >
                             <span>Liquidez Bancária Vinculada</span>
-                            <span style={{ fontWeight: 'bold' }}>1 GX = R$ 420.000,00</span>
+                            <span style={{ fontWeight: 'bold' }}>1 GX = R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
                         </div>
 

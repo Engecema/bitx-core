@@ -82,6 +82,19 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
     }
   });
 
+  // Cotação Oficial Sincronizada em Tempo Real
+  const [price, setPrice] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('bitx_global_price');
+      if (saved) {
+        const n = parseFloat(saved);
+        if (!isNaN(n) && n >= 435000 && n <= 445000) return n;
+      }
+    } catch {}
+    return 438783.13;
+  });
+  const [change, setChange] = useState<number>(0.42);
+
   // Wallet Activity history
   const [activities, setActivities] = useState<WalletActivity[]>(() => {
     try {
@@ -166,6 +179,12 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
         }
         const savedTxs = localStorage.getItem('bitx_client_txs');
         if (savedTxs) setActivities(JSON.parse(savedTxs));
+
+        const savedPrice = localStorage.getItem('bitx_global_price');
+        if (savedPrice) {
+          const np = parseFloat(savedPrice);
+          if (!isNaN(np) && np >= 435000 && np <= 445000) setPrice(np);
+        }
       } catch {}
     };
 
@@ -175,6 +194,12 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
     try {
       bc = new BroadcastChannel('global_exchange_cross_tab_sync');
       bc.onmessage = (event) => {
+        if (event.data?.type === 'price_update' && typeof event.data.price === 'number') {
+          if (event.data.price >= 435000 && event.data.price <= 445000) {
+            setPrice(event.data.price);
+            setChange(event.data.change || 0.42);
+          }
+        }
         if (event.data?.clients && Array.isArray(event.data.clients)) {
           const master = event.data.clients.find(
             (c: any) =>
@@ -520,6 +545,62 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
               </button>
             )}
           </header>
+
+          <div
+            style={{
+              background: '#0a1a14',
+              border: '1px solid #1c4b37',
+              borderRadius: '8px',
+              padding: '12px 18px',
+              marginBottom: '18px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '14px',
+              alignItems: 'center',
+              fontSize: '12px',
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid #10b981',
+                color: '#10b981',
+                padding: '4px 12px',
+                borderRadius: '16px',
+                fontWeight: 800,
+                fontSize: '11px',
+                letterSpacing: '0.04em',
+              }}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }}></span>
+              REDE ATIVA · PRODUÇÃO (MAINNET)
+            </div>
+
+            <div style={{ color: '#d0dbd1' }}>
+              Cotação BTXC:{' '}
+              <strong style={{ color: '#c5ed80', fontSize: '13px', fontFamily: 'DM Mono, monospace' }}>
+                R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong>
+              <span style={{ color: '#10b981', fontWeight: 800, marginLeft: '6px' }}>
+                +{change.toFixed(2)}%
+              </span>
+            </div>
+
+            <div style={{ color: '#94a3b8' }}>
+              Cotação USD:{' '}
+              <strong style={{ color: '#ffffff' }}>R$ 5,00</strong>{' '}
+              <span style={{ color: '#7dd3fc', marginLeft: '4px' }}>
+                (1 BTXC = $ {(price / 5.0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)
+              </span>
+            </div>
+
+            <div style={{ marginLeft: 'auto', color: '#6ee7b7', fontSize: '11px', fontWeight: 600 }}>
+              Global Exchange: ● Online v3.4
+            </div>
+          </div>
 
           <div
             className="wallet-test-warning"
