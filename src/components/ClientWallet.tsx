@@ -47,7 +47,7 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       const saved = localStorage.getItem('bitx_client_balance');
       if (saved) {
         const n = parseFloat(saved);
-        if (!isNaN(n) && n >= 251.5) return n;
+        if (!isNaN(n) && n > 0 && n !== 251.5) return n;
       }
       const synced = localStorage.getItem('bitx_ge_synced_clients');
       if (synced) {
@@ -57,9 +57,28 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
           return master.btxcBalance;
         }
       }
-      return 251.5;
+      return 13.0;
     } catch {
-      return 251.5;
+      return 13.0;
+    }
+  });
+
+  const [brlBalance, setBrlBalance] = useState<number>(() => {
+    try {
+      const synced = localStorage.getItem('bitx_ge_synced_clients');
+      if (synced) {
+        const parsed = JSON.parse(synced);
+        const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
+        if (master && typeof master.brlBalance === 'number' && master.brlBalance > 0) {
+          if (master.brlBalance === 2310232.27 || master.brlBalance === 43013539.19) {
+            return 420072.14;
+          }
+          return master.brlBalance;
+        }
+      }
+      return 420072.14;
+    } catch {
+      return 420072.14;
     }
   });
 
@@ -79,17 +98,9 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       {
         id: 'tx_ba696b9631c9e821fa83d47b01',
         type: 'received',
-        amount: 1.5,
-        counterparty: 'Transferência BitX Core Mainnet (btxc1qf08xve99...)',
-        time: 'Hoje, 08:53',
-        status: 'Confirmado na Mainnet',
-      },
-      {
-        id: 'tx_mainnet_f891b0c',
-        type: 'received',
-        amount: 250.0,
-        counterparty: 'Custódia Engecema PJ (Aporte Inicial)',
-        time: '19/10/2026',
+        amount: 13.0,
+        counterparty: 'Transferência BitX Core Mainnet (Liquidez Bancária Banco do Brasil · R$ 420.072,14)',
+        time: '24/10/2026, 08:53',
         status: 'Confirmado na Mainnet',
       },
     ];
@@ -145,6 +156,14 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       try {
         const savedBal = localStorage.getItem('bitx_client_balance');
         if (savedBal) setBalance(parseFloat(savedBal));
+        const synced = localStorage.getItem('bitx_ge_synced_clients');
+        if (synced) {
+          const parsed = JSON.parse(synced);
+          const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
+          if (master && typeof master.brlBalance === 'number') {
+            setBrlBalance(master.brlBalance);
+          }
+        }
         const savedTxs = localStorage.getItem('bitx_client_txs');
         if (savedTxs) setActivities(JSON.parse(savedTxs));
       } catch {}
@@ -162,11 +181,16 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
               c.id === 'GX-CLI-0001' ||
               c.bitxAddress === 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'
           );
-          if (master && typeof master.btxcBalance === 'number') {
-            setBalance(master.btxcBalance);
-            try {
-              localStorage.setItem('bitx_client_balance', master.btxcBalance.toString());
-            } catch {}
+          if (master) {
+            if (typeof master.btxcBalance === 'number') {
+              setBalance(master.btxcBalance);
+              try {
+                localStorage.setItem('bitx_client_balance', master.btxcBalance.toString());
+              } catch {}
+            }
+            if (typeof master.brlBalance === 'number') {
+              setBrlBalance(master.brlBalance);
+            }
           }
         }
       };
@@ -770,11 +794,11 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
                       </p>
                       <span className="wallet-balance-unit">
                         BTXC · R${' '}
-                        {(balance * 420.5).toLocaleString('pt-BR', {
+                        {brlBalance.toLocaleString('pt-BR', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}{' '}
-                        (Cotação Global Exchange)
+                        (Liquidez Bancária Banco do Brasil &bull; Global Exchange)
                       </span>
                     </div>
                     <span className="wallet-brand-mark" aria-hidden="true">
@@ -1085,7 +1109,7 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
                             {act.amount.toFixed(4)} BTXC
                           </span>
                           <div style={{ fontSize: '11px', color: '#64716a' }}>
-                            R$ {(act.amount * 420.5).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            R$ {(act.amount === 13.0 ? 420072.14 : (act.amount / (balance || 13.0)) * brlBalance).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </div>
                         </div>
                       </div>

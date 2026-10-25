@@ -172,23 +172,11 @@ export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [
     txid: 'tx_ba696b9631c9e821fa83d47b01',
     clientId: 'GX-CLI-0001',
     type: 'Transferência BitX Core Mainnet',
-    amountGx: 1.5,
-    amountBrl: 628539.19,
+    amountGx: 13.0,
+    amountBrl: 420072.14,
     counterparty:
-      'Transferência BitX Core Mainnet (btxc1qf08xve99...) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey]',
+      'Transferência BitX Core Mainnet (btxc1qf08xve99...) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Bancária Banco do Brasil R$ 420.072,14]',
     timestamp: '24/10/2026, 08:53:12',
-    status: 'Confirmado em Custódia',
-    channelStatus: 'Transmitido para Global Exchange',
-  },
-  {
-    id: 'CUST-0001',
-    txid: '0x8f2d4e1a9b7c3f5e0a2b4c6d8e1f3a5b7c9d0e2f4a6b8c0d2e4f6a8b0c2d4e6f',
-    clientId: 'GX-CLI-0001',
-    type: 'Aporte Inicial',
-    amountGx: 250.0,
-    amountBrl: 42385000.0,
-    counterparty: 'Custódia Engecema PJ -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
-    timestamp: '19/10/2026, 09:30:00',
     status: 'Confirmado em Custódia',
     channelStatus: 'Transmitido para Global Exchange',
   },
@@ -349,17 +337,33 @@ export const getStoredCustodyLedger = (): CustodyLedgerItem[] => {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const filtered = parsed.filter((item) => {
+        // Filtrar clientes deletados e remover lançamentos obsoletos que inflavam o saldo
+        let filtered = parsed.filter((item) => {
           const itemCid = (item as any).clientId;
           const cp = item.counterparty || '';
-          return !isClientMarkedDeleted(itemCid, undefined, undefined, cp);
+          if (isClientMarkedDeleted(itemCid, undefined, undefined, cp)) return false;
+          // Remover lançamentos obsoletos legados de GX-CLI-0001 que não sejam o lançamento auditado oficial
+          if (item.id === 'CUST-0001' || (itemCid === 'GX-CLI-0001' && item.id !== 'CUST-TX-270')) {
+            return false;
+          }
+          return true;
         });
 
-        // Assegurar preservação incondicional do lançamento auditado CUST-TX-270 (+1.5000 GX)
-        const hasTx270 = filtered.some(
+        // Assegurar preservação e atualização dos valores reais do lançamento CUST-TX-270 (+13.00 GX / R$ 420.072,14)
+        const tx270Idx = filtered.findIndex(
           (it) => it.id === 'CUST-TX-270' || it.txid?.includes('tx_ba696b9631')
         );
-        if (!hasTx270 && DEFAULT_CUSTODY_LEDGER.length > 0) {
+        if (tx270Idx >= 0) {
+          filtered[tx270Idx] = {
+            ...filtered[tx270Idx],
+            amountGx: 13.0,
+            amountBrl: 420072.14,
+            counterparty:
+              'Transferência BitX Core Mainnet (btxc1qf08xve99...) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Bancária Banco do Brasil R$ 420.072,14]',
+            status: 'Confirmado em Custódia',
+            channelStatus: 'Transmitido para Global Exchange',
+          };
+        } else if (DEFAULT_CUSTODY_LEDGER.length > 0) {
           const tx270 = DEFAULT_CUSTODY_LEDGER.find((d) => d.id === 'CUST-TX-270');
           if (tx270) filtered.unshift(tx270);
         }
@@ -572,7 +576,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
     {
       id: 'GX-CLI-0001',
       name: 'Geoni Clementino Cesar de Matos',
-      titleBadge: 'Titular Principal & PJ Engecema',
+      titleBadge: 'Cliente Real',
       email: 'geonimatos31@hotmail.com',
       document: '70781338387',
       bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
@@ -580,12 +584,12 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
         'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
         'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
       ],
-      btxcBalance: 251.5,
-      brlBalance: 43013539.19,
-      usdtBalance: 8602707.84,
-      estimatedMarketValue: 105902008.38,
+      btxcBalance: 13.0,
+      brlBalance: 420072.14,
+      usdtBalance: 84014.43,
+      estimatedMarketValue: 5474060.02,
       status: 'Institucional',
-      createdAt: '19/10/2026',
+      createdAt: '24/10/2026',
     },
   ];
 
@@ -622,6 +626,18 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
                 if (!secondaryAddresses.includes('btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a')) {
                   secondaryAddresses.push('btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a');
                 }
+
+                // Sincronizar expressamente valores reais auditados do titular: R$ 420.072,14 BRL e 13.00 BTXC
+                if (
+                  client.brlBalance === 2310232.27 ||
+                  client.brlBalance === 43013539.19 ||
+                  !client.brlBalance
+                ) {
+                  client.brlBalance = 420072.14;
+                  client.btxcBalance = 13.0;
+                  client.usdtBalance = 84014.43;
+                  client.estimatedMarketValue = 5474060.02;
+                }
               }
 
               // Calcular posição cumulativa auditada do Livro Razão
@@ -638,25 +654,25 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
                 ? custodyBal.gx
                 : (typeof client.btxcBalance === 'number' && !isNaN(client.btxcBalance) && client.btxcBalance > 0
                     ? client.btxcBalance
-                    : (isMaster ? 251.5 : 0));
+                    : (isMaster ? 13.0 : 0));
 
               const finalBrl = custodyBal.brl > 0
                 ? custodyBal.brl
                 : (typeof client.brlBalance === 'number' && !isNaN(client.brlBalance) && client.brlBalance > 0
                     ? client.brlBalance
-                    : (isMaster ? 43013539.19 : 0));
+                    : (isMaster ? 420072.14 : 0));
 
               const finalUsdt = custodyBal.usdt > 0
                 ? custodyBal.usdt
                 : (typeof client.usdtBalance === 'number' && !isNaN(client.usdtBalance) && client.usdtBalance > 0
                     ? client.usdtBalance
-                    : (isMaster ? 8602707.84 : 0));
+                    : (isMaster ? 84014.43 : 0));
 
               const finalEst = custodyBal.estimatedMarketValue > 0
                 ? custodyBal.estimatedMarketValue
                 : (typeof client.estimatedMarketValue === 'number' && !isNaN(client.estimatedMarketValue) && client.estimatedMarketValue > 0
                     ? client.estimatedMarketValue
-                    : (isMaster ? 105902008.38 : 0));
+                    : (isMaster ? 5474060.02 : 0));
 
               return {
                 ...client,
@@ -940,13 +956,24 @@ END $$;
         };
 
         for (const c of data) {
-          const finalBtxc = parseNum(c.btxc_balance, c.gx_balance, c.saldo_gx, c.balance);
+          let finalBtxc = parseNum(c.btxc_balance, c.gx_balance, c.saldo_gx, c.balance);
           let finalBrl = parseNum(c.brl_balance, c.saldo_liquidez, c.liquidity_brl, c.saldo_reais);
+          const isMaster = c.id === 'GX-CLI-0001' || c.email === 'geonimatos31@hotmail.com';
+          if (isMaster) {
+            if (finalBrl === 2310232.27 || finalBrl === 43013539.19 || !finalBrl) {
+              finalBrl = 420072.14;
+            }
+            if (finalBtxc <= 0) {
+              finalBtxc = 13.0;
+            }
+          }
           if (finalBrl <= 0 && finalBtxc > 0) {
             finalBrl = +(finalBtxc * price).toFixed(2);
           }
           let finalUsdt = parseNum(c.usdt_balance, c.saldo_usdt);
-          if (finalUsdt <= 0 && finalBrl > 0) {
+          if (isMaster && (finalUsdt === 462046.45 || finalUsdt <= 0)) {
+            finalUsdt = +(finalBrl / 5.0).toFixed(2);
+          } else if (finalUsdt <= 0 && finalBrl > 0) {
             finalUsdt = +(finalBrl / 5.0).toFixed(2);
           }
           const finalEst = +(finalBtxc * (105270385.0 / 250.0)).toFixed(2);
@@ -1491,21 +1518,36 @@ END $$;
   const handleRestoreMasterClient = () => {
     clearStoredDeletedClientId('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387');
     clearStoredDeletedClientRecord('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387');
-    const master = DEFAULT_REAL_CLIENTS[0];
+    const master = { ...DEFAULT_REAL_CLIENTS[0] };
     const exists = exchangeClients.some((c) => c.id === master.id || c.email === master.email);
-    const updated = exists ? exchangeClients : [master, ...exchangeClients];
+    const updated = exists
+      ? exchangeClients.map((c) => (c.id === master.id || c.email === master.email ? { ...master } : c))
+      : [master, ...exchangeClients];
     setExchangeClients(updated);
     saveStoredRealClients(updated);
 
-    // Assegurar entrada no livro razão de custódia
+    // Assegurar entrada no livro razão de custódia com valores oficiais
     const currentLedger = getStoredCustodyLedger();
     const hasLedger = currentLedger.some(
-      (l) => (l as any).clientId === master.id || l.counterparty.includes(master.id)
+      (l) => (l as any).clientId === master.id || l.counterparty.includes(master.id) || l.id === 'CUST-TX-270'
     );
     if (!hasLedger) {
       const newLedger = [...DEFAULT_CUSTODY_LEDGER, ...currentLedger];
       setCustodyLedger(newLedger);
       saveStoredCustodyLedger(newLedger);
+    } else {
+      const sanitized = currentLedger.map((l) => {
+        if ((l as any).clientId === master.id || l.id === 'CUST-TX-270') {
+          return {
+            ...l,
+            amountGx: 13.0,
+            amountBrl: 420072.14,
+          };
+        }
+        return l;
+      });
+      setCustodyLedger(sanitized);
+      saveStoredCustodyLedger(sanitized);
     }
 
     setSelectedCustodyClientId(master.id);
@@ -7551,16 +7593,16 @@ daemon=1
                       <div>
                         <span style={{ color: '#94a3b8', display: 'block' }}>Montante da Transferência:</span>
                         <strong style={{ color: '#10b981', fontSize: '14px', fontFamily: 'monospace' }}>
-                          +1.5000 GX
+                          +13.0000 GX
                         </strong>
-                        <span style={{ color: '#6ee7b7', display: 'block', fontSize: '11px' }}>+R$ 628.539,19</span>
+                        <span style={{ color: '#6ee7b7', display: 'block', fontSize: '11px' }}>+R$ 420.072,14</span>
                       </div>
                       <div>
                         <span style={{ color: '#94a3b8', display: 'block' }}>Posição Total Consolidada:</span>
                         <strong style={{ color: '#f8fafc', fontSize: '14px', fontFamily: 'monospace' }}>
-                          251.5000 GX
+                          13.0000 GX
                         </strong>
-                        <span style={{ color: '#10b981', display: 'block', fontSize: '11px' }}>R$ 43.013.539,19</span>
+                        <span style={{ color: '#10b981', display: 'block', fontSize: '11px' }}>R$ 420.072,14</span>
                       </div>
                     </div>
 
