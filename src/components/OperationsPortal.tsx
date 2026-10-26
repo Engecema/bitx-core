@@ -398,7 +398,7 @@ export const computeClientCustodyBalance = (
   clientId: string,
   clientEmail: string,
   ledger: CustodyLedgerItem[],
-  refPrice: number = 420000.0,
+  refPrice: number = 438828.42,
   clientName?: string
 ): { gx: number; brl: number; usdt: number; estimatedMarketValue: number } => {
   if (!clientId && !clientEmail && !clientName) {
@@ -446,7 +446,8 @@ export const computeClientCustodyBalance = (
   const safeGx = Math.max(0, +totalGx.toFixed(4));
   const safeBrl = Math.max(0, +totalBrl.toFixed(2));
   const safeUsdt = +(safeBrl / 5.0).toFixed(2);
-  const estimatedMarketValue = +(safeGx * (105270385.0 / 250.0)).toFixed(2);
+  // Equalizado à cotação da moeda BTXC na rede ativa mainnet na altura da cadeia #348.912
+  const estimatedMarketValue = +(safeGx * refPrice).toFixed(2);
 
   return {
     gx: safeGx,
@@ -587,7 +588,8 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
       btxcBalance: 13.0,
       brlBalance: 420072.14,
       usdtBalance: 84014.43,
-      estimatedMarketValue: 5474060.02,
+      // Equalizado com a cotação ativa da moeda BTXC na Mainnet (#348.912)
+      estimatedMarketValue: +(13.0 * 438828.42).toFixed(2),
       status: 'Institucional',
       createdAt: '24/10/2026',
     },
@@ -597,6 +599,17 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
   const getStoredRealClients = (): ExchangeClient[] => {
     try {
       const stored = localStorage.getItem('bitx_ge_synced_clients');
+      const activeQuote = (() => {
+        try {
+          const s = localStorage.getItem('bitx_global_price');
+          if (s) {
+            const n = parseFloat(s);
+            if (!isNaN(n) && n >= 435000 && n <= 445000) return n;
+          }
+        } catch {}
+        return 438828.42;
+      })();
+
       if (stored !== null) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -636,17 +649,17 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
                   client.brlBalance = 420072.14;
                   client.btxcBalance = 13.0;
                   client.usdtBalance = 84014.43;
-                  client.estimatedMarketValue = 5474060.02;
+                  client.estimatedMarketValue = +(13.0 * activeQuote).toFixed(2);
                 }
               }
 
-              // Calcular posição cumulativa auditada do Livro Razão
+              // Calcular posição cumulativa auditada do Livro Razão com a cotação ativa da Mainnet (#348.912)
               const currentLedger = getStoredCustodyLedger();
               const custodyBal = computeClientCustodyBalance(
                 client.id,
                 client.email,
                 currentLedger,
-                420000.0,
+                activeQuote,
                 client.name
               );
 
@@ -668,11 +681,8 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy
                     ? client.usdtBalance
                     : (isMaster ? 84014.43 : 0));
 
-              const finalEst = custodyBal.estimatedMarketValue > 0
-                ? custodyBal.estimatedMarketValue
-                : (typeof client.estimatedMarketValue === 'number' && !isNaN(client.estimatedMarketValue) && client.estimatedMarketValue > 0
-                    ? client.estimatedMarketValue
-                    : (isMaster ? 5474060.02 : 0));
+              // Valor de mercado equalizado à cotação BTXC na Mainnet ativa (#348.912)
+              const finalEst = +(finalGx * activeQuote).toFixed(2);
 
               return {
                 ...client,
@@ -979,7 +989,8 @@ END $$;
           } else if (finalUsdt <= 0 && finalBrl > 0) {
             finalUsdt = +(finalBrl / 5.0).toFixed(2);
           }
-          const finalEst = +(finalBtxc * (105270385.0 / 250.0)).toFixed(2);
+          // Equalizado com a cotação ativa da moeda BTXC na rede mainnet (#348.912)
+          const finalEst = +(finalBtxc * price).toFixed(2);
 
           let assignedAddress = c.bitx_address || c.address || c.wallet_address;
           // Se o cliente da Global Exchange ainda não tem endereço BitX Core na rede, gerar agora e espelhar na nuvem
@@ -1834,10 +1845,13 @@ END $$;
             btxcBalance: 13.0,
             brlBalance: 420072.14,
             usdtBalance: 84014.43,
-            estimatedMarketValue: 5474060.02,
+            estimatedMarketValue: +(13.0 * price).toFixed(2),
           };
         }
-        return c;
+        return {
+          ...c,
+          estimatedMarketValue: +(c.btxcBalance * price).toFixed(2),
+        };
       });
       setExchangeClients(updatedClients);
       saveStoredRealClients(updatedClients);
@@ -1939,7 +1953,7 @@ END $$;
             gx_balance: 13.0,
             brl_balance: 420072.14,
             usdt_balance: 84014.43,
-            estimated_market_value: 5474060.02,
+            estimated_market_value: +(13.0 * price).toFixed(2),
             status: 'Institucional',
             title_badge: 'Cliente Real',
             updated_at: new Date().toISOString(),
@@ -2010,7 +2024,8 @@ END $$;
       btxcBalance: btxcNum,
       brlBalance: brlNum,
       usdtBalance: usdtNum,
-      estimatedMarketValue: +(btxcNum * (105270385.0 / 250.0)).toFixed(2),
+      // Equalizado com a cotação ativa da moeda BTXC na rede mainnet (#348.912)
+      estimatedMarketValue: +(btxcNum * price).toFixed(2),
       status: newClientStatus,
       createdAt: editingClient?.createdAt || new Date().toLocaleDateString('pt-BR'),
     };
@@ -2542,7 +2557,7 @@ END $$;
       const newBtxc = +(targetClient.btxcBalance + amt).toFixed(4);
       const newBrl = +(targetClient.brlBalance + amt * price).toFixed(2);
       const newUsdt = +(newBrl / 5.0).toFixed(2);
-      const newEst = +(newBtxc * (105270385.0 / 250.0)).toFixed(2);
+      const newEst = +(newBtxc * price).toFixed(2);
 
       // Vincular permanentemente o endereço de destino ao perfil do cliente na Global Exchange
       const currentSec = targetClient.secondaryAddresses ? [...targetClient.secondaryAddresses] : [];
@@ -2713,7 +2728,7 @@ END $$;
         const newBtxc = +(c.btxcBalance + amt).toFixed(4);
         const newBrl = +(newBtxc * price).toFixed(2);
         const newUsdt = +(newBrl / 5.0).toFixed(2);
-        const newEst = +(newBtxc * (105270385.0 / 250.0)).toFixed(2);
+        const newEst = +(newBtxc * price).toFixed(2);
         return {
           ...c,
           btxcBalance: newBtxc,
@@ -4680,6 +4695,7 @@ daemon=1
                   <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#cbd5e1' }}>
                     <strong>Total Custodiado Real:</strong> <span style={{ color: '#10b981', fontWeight: 800 }}>{exchangeClients.reduce((acc, c) => acc + c.btxcBalance, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} GX</span> &bull;{' '}
                     <strong>Total em Reais (R$):</strong> <span style={{ color: '#38bdf8', fontWeight: 800 }}>R$ {exchangeClients.reduce((acc, c) => acc + c.brlBalance, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span> &bull;{' '}
+                    <strong>Valor de Mercado Estimado:</strong> <span style={{ color: '#f59e0b', fontWeight: 800 }}>R$ {(exchangeClients.reduce((acc, c) => acc + (c.btxcBalance || 0), 0) * price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> &bull;{' '}
                     <span style={{ color: '#94a3b8' }}>{exchangeClients.length} cliente(s) ativo(s)</span>
                   </p>
                 </div>
@@ -4884,7 +4900,8 @@ daemon=1
                       </tr>
                     ) : (
                       exchangeClients.map((c) => {
-                        const estVal = c.estimatedMarketValue || (c.btxcBalance * (105270385.0 / 250.0));
+                        // Equalizado com a cotação ativa da moeda BTXC na rede mainnet (#348.912)
+                        const estVal = +(c.btxcBalance * price).toFixed(2);
                         const shortAddr = c.bitxAddress
                           ? `${c.bitxAddress.substring(0, 8)}...${c.bitxAddress.slice(-6)}`
                           : 'bxrt1qnk...4s0zey';
@@ -4965,7 +4982,10 @@ daemon=1
                             </td>
                             <td>
                               <div style={{ fontWeight: '700', color: '#f59e0b', fontFamily: 'DM Mono, monospace', fontSize: '13px' }}>
-                                R$ {estVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                R$ {estVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
+                                Equalizado à Mainnet #{blockHeight.toLocaleString('pt-BR')} (R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                               </div>
                             </td>
                             <td>
@@ -5860,6 +5880,9 @@ daemon=1
                       value={newClientBtxc}
                       onChange={(e) => setNewClientBtxc(e.target.value)}
                     />
+                    <small style={{ fontSize: '10px', color: '#f59e0b', marginTop: '2px', display: 'block' }}>
+                      Valor de Mercado Estimado na Mainnet #{blockHeight.toLocaleString('pt-BR')}: R$ {((parseFloat(newClientBtxc) || 0) * price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </small>
                   </div>
 
                   <div>
