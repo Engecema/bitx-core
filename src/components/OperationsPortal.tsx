@@ -497,7 +497,10 @@ export const computeClientCustodyBalance = (
   };
 };
 
-export const OperationsPortal: React.FC<OperationsPortalProps> = ({ onOpenPolicy }) => {
+export const OperationsPortal: React.FC<OperationsPortalProps> = ({
+  onOpenPolicy,
+  onOpenSiteModal,
+}) => {
   const [activeTab, setActiveTab] = useState<
     'custody' | 'equalization' | 'mining' | 'exchange' | 'config' | 'explorer' | 'mempool' | 'wallet'
   >('custody');
