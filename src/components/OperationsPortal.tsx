@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import '../styles/portal.css';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { supabase } from '../utils/supabase';
+import { AuditReportModal } from './AuditReportModal';
 
 interface OperationsPortalProps {
   onOpenPolicy: (policy: 'privacidade' | 'termos' | 'cookies') => void;
@@ -1558,6 +1559,7 @@ ON CONFLICT (id) DO UPDATE SET
   const [clientFormFeedback, setClientFormFeedback] = useState<string>('');
   const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  const [showAuditReportModal, setShowAuditReportModal] = useState<boolean>(false);
   const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string; email?: string } | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
 
@@ -4316,6 +4318,25 @@ daemon=1
                     title="Canal de Envio e Despacho Inter-Plataformas BitX Core ➔ Global Exchange"
                   >
                     🌉 Canal Inter-Plataformas (BitX ➔ GX)
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-btn"
+                    style={{
+                      background: '#0f2444',
+                      border: '1px solid #38bdf8',
+                      color: '#7dd3fc',
+                      fontSize: '12px',
+                      padding: '6px 14px',
+                      fontWeight: 800,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                    onClick={() => setShowAuditReportModal(true)}
+                    title="Abrir relatório de auditoria e comparativo Supabase ⇄ BitX ⇄ Global Exchange"
+                  >
+                    🔍 Auditoria & Discrepâncias
                   </button>
                   <button
                     type="button"
@@ -8666,6 +8687,16 @@ daemon=1
           </div>
         </div>
       )}
+
+      {/* MODAL DO UTILITÁRIO DE AUDITORIA & RELATÓRIO DE DISCREPÂNCIAS */}
+      <AuditReportModal
+        isOpen={showAuditReportModal}
+        onClose={() => setShowAuditReportModal(false)}
+        officialPrice={price}
+        onAdjustmentApplied={() => {
+          fetchRealClientsFromGlobalExchange();
+        }}
+      />
 
       {/* Footer */}
       <footer className="portal-footer">

@@ -70,13 +70,13 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       if (synced) {
         const parsed = JSON.parse(synced);
         const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
-        if (master && typeof master.brlBalance === 'number' && master.brlBalance >= 2065678.72) {
+        if (master && typeof master.brlBalance === 'number' && master.brlBalance >= 420072.14) {
           return master.brlBalance;
         }
       }
-      return 2065678.72;
+      return 420072.14;
     } catch {
-      return 2065678.72;
+      return 420072.14;
     }
   });
 
@@ -212,7 +212,7 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
           const parsed = JSON.parse(synced);
           const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
           if (master && typeof master.brlBalance === 'number') {
-            setBrlBalance(Math.max(master.brlBalance, 2065678.72));
+            setBrlBalance(Math.max(master.brlBalance, 420072.14));
           }
           if (master && typeof master.btxcBalance === 'number') {
             setBalance(Math.max(master.btxcBalance, 16.75));
@@ -294,9 +294,9 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
             const finalBtxc = typeof master.btxc_balance === 'number' && master.btxc_balance >= 16.75
               ? master.btxc_balance
               : (typeof master.gx_balance === 'number' && master.gx_balance >= 16.75 ? master.gx_balance : 16.75);
-            const finalBrl = typeof master.brl_balance === 'number' && master.brl_balance >= 2065678.72
+            const finalBrl = typeof master.brl_balance === 'number' && master.brl_balance >= 420072.14
               ? master.brl_balance
-              : 2065678.72;
+              : 420072.14;
             setBalance(finalBtxc);
             setBrlBalance(finalBrl);
             try {
