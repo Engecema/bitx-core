@@ -875,22 +875,25 @@ END $$;
           email: client.email,
           document: client.document || null,
           bitx_address: client.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-          secondary_addresses: client.secondaryAddresses || [
-            'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-            'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
-          ],
           btxc_balance: client.btxcBalance || 0,
           gx_balance: client.btxcBalance || 0,
           brl_balance: client.brlBalance || 0,
           usdt_balance: client.usdtBalance || 0,
-          estimated_market_value: client.estimatedMarketValue || 0,
+          estimated_market_value: client.estimatedMarketValue || +( (client.btxcBalance || 0) * price).toFixed(2),
           status: client.status || 'Verificado KYC',
           title_badge: client.titleBadge || 'Titular Principal',
           custody_txid: 'tx_ba696b9631c9e821fa83d47b01',
           updated_at: new Date().toISOString(),
         };
 
-        const { error } = await supabase.from('clients').upsert([payload]);
+        let { error } = await supabase.from('clients').upsert([payload]);
+        if (error && error.message && (error.message.includes('column') || error.message.includes('schema cache'))) {
+          // Fallback resiliente caso o schema remoto do Supabase não possua colunas adicionais opcionais
+          delete payload.custody_txid;
+          delete payload.title_badge;
+          const retry = await supabase.from('clients').upsert([payload]);
+          error = retry.error;
+        }
         if (error) {
           throw error;
         }
@@ -1327,16 +1330,12 @@ END $$;
       );
 
       // 3. Atualizar e sincronizar a tabela 'clients' no Supabase Cloud (banco compartilhado)
-      const clientPayload = {
+      const clientPayload: any = {
         id: master.id,
         name: master.name,
         email: master.email,
         document: master.document || '70781338387',
         bitx_address: master.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-        secondary_addresses: master.secondaryAddresses || [
-          'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-          'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
-        ],
         btxc_balance: custodyBal.gx,
         gx_balance: custodyBal.gx,
         brl_balance: custodyBal.brl,
@@ -1348,7 +1347,13 @@ END $$;
         updated_at: new Date().toISOString(),
       };
 
-      const { error: clientErr } = await supabase.from('clients').upsert([clientPayload]);
+      let { error: clientErr } = await supabase.from('clients').upsert([clientPayload]);
+      if (clientErr && clientErr.message && (clientErr.message.includes('column') || clientErr.message.includes('schema cache'))) {
+        delete clientPayload.custody_txid;
+        delete clientPayload.title_badge;
+        const retry = await supabase.from('clients').upsert([clientPayload]);
+        clientErr = retry.error;
+      }
       if (clientErr) {
         console.warn('[Dispatch clients Supabase error]:', clientErr.message);
       }
