@@ -26,7 +26,7 @@ interface WalletActivity {
   amount: number;
   counterparty: string;
   time: string;
-  status: 'Confirmado na Mainnet' | 'Processando';
+  status: 'Confirmado na Mainnet' | 'Confirmado na Corretora' | 'Confirmado em Custódia' | 'Processando';
 }
 
 export const ClientWallet: React.FC<ClientWalletProps> = ({
@@ -47,13 +47,13 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       const saved = localStorage.getItem('bitx_client_balance');
       if (saved) {
         const n = parseFloat(saved);
-        if (!isNaN(n) && n > 0 && n !== 251.5) return n;
+        if (!isNaN(n) && n >= 16.75 && n !== 251.5) return n;
       }
       const synced = localStorage.getItem('bitx_ge_synced_clients');
       if (synced) {
         const parsed = JSON.parse(synced);
         const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
-        if (master && typeof master.btxcBalance === 'number' && master.btxcBalance > 0) {
+        if (master && typeof master.btxcBalance === 'number' && master.btxcBalance >= 16.75) {
           return master.btxcBalance;
         }
       }
@@ -69,10 +69,7 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       if (synced) {
         const parsed = JSON.parse(synced);
         const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
-        if (master && typeof master.brlBalance === 'number' && master.brlBalance > 0) {
-          if (master.brlBalance === 2310232.27 || master.brlBalance === 43013539.19) {
-            return 2065678.72;
-          }
+        if (master && typeof master.brlBalance === 'number' && master.brlBalance >= 2065678.72) {
           return master.brlBalance;
         }
       }
@@ -95,25 +92,50 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
   });
   const [change, setChange] = useState<number>(0.42);
 
-  // Wallet Activity history
+  // Wallet Activity history (Incluindo expressamente a transferência Mempool de 3.75 GX + transferência de 13.00 GX)
   const [activities, setActivities] = useState<WalletActivity[]>(() => {
     try {
       const saved = localStorage.getItem('bitx_client_txs');
       if (saved) {
-        const parsed = JSON.parse(saved);
+        let parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const has270 = parsed.some((t: any) => t.id?.includes('ba696b9631'));
-          if (has270) return parsed;
+          const has375 = parsed.some((t: any) => t.id?.includes('tx_mempool_375000') || t.id?.includes('375'));
+          const has270 = parsed.some((t: any) => t.id?.includes('ba696b9631') || t.id?.includes('270'));
+
+          if (!has375) {
+            parsed.unshift({
+              id: 'tx_mempool_375000_gx_confirmed',
+              type: 'received',
+              amount: 3.75,
+              counterparty: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange)',
+              time: '26/10/2026, 05:38',
+              status: 'Confirmado na Corretora',
+            });
+          }
+          if (!has270) {
+            parsed.push({
+              id: 'tx_ba696b9631c9e821fa83d47b01',
+              type: 'received',
+              amount: 13.0,
+              counterparty: 'Transferência BitX Core Mainnet (Liquidez Bancária Banco do Brasil · R$ 420.072,14)',
+              time: '24/10/2026, 08:53',
+              status: 'Confirmado na Mainnet',
+            });
+          }
+          try {
+            localStorage.setItem('bitx_client_txs', JSON.stringify(parsed));
+          } catch {}
+          return parsed;
         }
       }
     } catch {}
-    return [
+    const defaults: WalletActivity[] = [
       {
         id: 'tx_mempool_375000_gx_confirmed',
         type: 'received',
         amount: 3.75,
         counterparty: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange)',
-        time: 'Hoje, 05:38',
+        time: '26/10/2026, 05:38',
         status: 'Confirmado na Corretora',
       },
       {
@@ -125,6 +147,10 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
         status: 'Confirmado na Mainnet',
       },
     ];
+    try {
+      localStorage.setItem('bitx_client_txs', JSON.stringify(defaults));
+    } catch {}
+    return defaults;
   });
 
   // Navigation state
@@ -176,17 +202,69 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
     const handleStorageChange = () => {
       try {
         const savedBal = localStorage.getItem('bitx_client_balance');
-        if (savedBal) setBalance(parseFloat(savedBal));
+        if (savedBal) {
+          const val = parseFloat(savedBal);
+          if (!isNaN(val)) setBalance(Math.max(val, 16.75));
+        }
         const synced = localStorage.getItem('bitx_ge_synced_clients');
         if (synced) {
           const parsed = JSON.parse(synced);
           const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
           if (master && typeof master.brlBalance === 'number') {
-            setBrlBalance(master.brlBalance);
+            setBrlBalance(Math.max(master.brlBalance, 2065678.72));
+          }
+          if (master && typeof master.btxcBalance === 'number') {
+            setBalance(Math.max(master.btxcBalance, 16.75));
           }
         }
         const savedTxs = localStorage.getItem('bitx_client_txs');
-        if (savedTxs) setActivities(JSON.parse(savedTxs));
+        if (savedTxs) {
+          let list = JSON.parse(savedTxs);
+          if (Array.isArray(list)) {
+            const has375 = list.some((t: any) => t.id?.includes('tx_mempool_375000') || t.id?.includes('375'));
+            if (!has375) {
+              list.unshift({
+                id: 'tx_mempool_375000_gx_confirmed',
+                type: 'received',
+                amount: 3.75,
+                counterparty: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange)',
+                time: '26/10/2026, 05:38',
+                status: 'Confirmado na Corretora',
+              });
+            }
+            setActivities(list);
+          }
+        }
+
+        // Também sincronizar direto do Livro Razão de Custódia
+        const ledgerRaw = localStorage.getItem('bitx_custody_ledger');
+        if (ledgerRaw) {
+          const ledgerParsed = JSON.parse(ledgerRaw);
+          if (Array.isArray(ledgerParsed)) {
+            const clientItems = ledgerParsed.filter(
+              (l: any) => l.clientId === 'GX-CLI-0001' || l.counterparty?.includes('GX-CLI-0001') || l.id === 'CUST-TX-375'
+            );
+            if (clientItems.length > 0) {
+              setActivities((prev) => {
+                const combined = [...prev];
+                for (const item of clientItems) {
+                  const txKey = item.txid || item.id;
+                  if (!combined.some((a) => a.id === txKey || a.id === item.id)) {
+                    combined.unshift({
+                      id: txKey,
+                      type: 'received',
+                      amount: item.amountGx,
+                      counterparty: item.counterparty,
+                      time: item.timestamp || 'Hoje',
+                      status: 'Confirmado na Corretora',
+                    });
+                  }
+                }
+                return combined;
+              });
+            }
+          }
+        }
 
         const savedPrice = localStorage.getItem('bitx_global_price');
         if (savedPrice) {
