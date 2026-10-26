@@ -57,9 +57,9 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
           return master.btxcBalance;
         }
       }
-      return 13.0;
+      return 16.75;
     } catch {
-      return 13.0;
+      return 16.75;
     }
   });
 
@@ -71,14 +71,14 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
         const master = parsed.find((c: any) => c.id === 'GX-CLI-0001');
         if (master && typeof master.brlBalance === 'number' && master.brlBalance > 0) {
           if (master.brlBalance === 2310232.27 || master.brlBalance === 43013539.19) {
-            return 420072.14;
+            return 2065678.72;
           }
           return master.brlBalance;
         }
       }
-      return 420072.14;
+      return 2065678.72;
     } catch {
-      return 420072.14;
+      return 2065678.72;
     }
   });
 
@@ -108,6 +108,14 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       }
     } catch {}
     return [
+      {
+        id: 'tx_mempool_375000_gx_confirmed',
+        type: 'received',
+        amount: 3.75,
+        counterparty: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange)',
+        time: 'Hoje, 05:38',
+        status: 'Confirmado na Corretora',
+      },
       {
         id: 'tx_ba696b9631c9e821fa83d47b01',
         type: 'received',
