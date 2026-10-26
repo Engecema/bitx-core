@@ -173,7 +173,7 @@ export const DEFAULT_CUSTODY_LEDGER: CustodyLedgerItem[] = [
     clientId: 'GX-CLI-0001',
     type: 'Transferência BitX Core Mainnet',
     amountGx: 3.75,
-    amountBrl: 1645606.58,
+    amountBrl: 0.0,
     counterparty:
       'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey]',
     timestamp: '26/10/2026, 05:38:00',
@@ -372,7 +372,7 @@ export const getStoredCustodyLedger = (): CustodyLedgerItem[] => {
           clientId: 'GX-CLI-0001',
           type: 'Transferência BitX Core Mainnet',
           amountGx: 3.75,
-          amountBrl: 1645606.58,
+          amountBrl: 0.0,
           counterparty:
             'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]',
           timestamp: '26/10/2026, 05:38:00',
@@ -639,8 +639,8 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
         'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a',
       ],
       btxcBalance: 16.75,
-      brlBalance: 2065678.72,
-      usdtBalance: 413135.74,
+      brlBalance: 420072.14,
+      usdtBalance: 84014.43,
       // Equalizado com a cotação ativa da moeda BTXC na Mainnet (#348.912)
       estimatedMarketValue: +(16.75 * 438828.42).toFixed(2),
       status: 'Institucional',
@@ -705,9 +705,9 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
                   client.btxcBalance === 13.0 ||
                   !client.brlBalance
                 ) {
-                  client.brlBalance = 2065678.72;
+                  client.brlBalance = 420072.14;
                   client.btxcBalance = 16.75;
-                  client.usdtBalance = 413135.74;
+                  client.usdtBalance = 84014.43;
                   client.estimatedMarketValue = +(16.75 * activeQuote).toFixed(2);
                 }
               }
@@ -732,18 +732,18 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
                 ? custodyBal.brl
                 : (typeof client.brlBalance === 'number' && !isNaN(client.brlBalance) && client.brlBalance > 0
                     ? client.brlBalance
-                    : (isMaster ? 2065678.72 : 0));
+                    : (isMaster ? 420072.14 : 0));
 
               const calculatedUsdt = custodyBal.usdt > 0
                 ? custodyBal.usdt
                 : (typeof client.usdtBalance === 'number' && !isNaN(client.usdtBalance) && client.usdtBalance > 0
                     ? client.usdtBalance
-                    : (isMaster ? 413135.74 : 0));
+                    : (isMaster ? 84014.43 : 0));
 
               // Salvaguarda: O titular mestre possui os lançamentos auditados CUST-TX-270 (13 GX) + CUST-TX-375 (3.75 GX)
               const finalGx = isMaster && (calculatedGx === 13.0 || calculatedGx < 16.75) ? 16.75 : calculatedGx;
-              const finalBrl = isMaster && (calculatedBrl === 420072.14 || calculatedBrl < 2065678.72) ? 2065678.72 : calculatedBrl;
-              const finalUsdt = isMaster && (calculatedUsdt === 84014.43 || calculatedUsdt < 413135.74) ? 413135.74 : calculatedUsdt;
+              const finalBrl = isMaster && (calculatedBrl === 420072.14 || calculatedBrl < 420072.14) ? 420072.14 : calculatedBrl;
+              const finalUsdt = isMaster && (calculatedUsdt === 84014.43 || calculatedUsdt < 84014.43) ? 84014.43 : calculatedUsdt;
 
               // Valor de mercado equalizado à cotação BTXC na Mainnet ativa (#348.912)
               const finalEst = +(finalGx * activeQuote).toFixed(2);
@@ -779,7 +779,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
     ) || clientsToSync[0];
 
     const masterGx = primaryClient?.btxcBalance || 16.75;
-    const masterBrl = primaryClient?.brlBalance || 2065678.72;
+    const masterBrl = primaryClient?.brlBalance || 420072.14;
 
     // 1. WebSocket Broadcast via Supabase Realtime Channels
     try {
@@ -818,7 +818,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
           clientId: 'GX-CLI-0001',
           clientName: 'Geoni Clementino Cesar de Matos',
           amountGx: 3.75,
-          amountBrl: 1645606.58,
+          amountBrl: 0.0,
           newTotalGx: masterGx,
           newTotalBrl: masterBrl,
           timestamp: ts,
@@ -1059,8 +1059,8 @@ ON CONFLICT (id) DO UPDATE SET
           client.document === '70781338387';
 
         const clientGx = isMaster && client.btxcBalance < 16.75 ? 16.75 : (client.btxcBalance || 0);
-        const clientBrl = isMaster && client.brlBalance < 2065678.72 ? 2065678.72 : (client.brlBalance || 0);
-        const clientUsdt = isMaster && client.usdtBalance < 413135.74 ? 413135.74 : (client.usdtBalance || 0);
+        const clientBrl = isMaster && client.brlBalance < 420072.14 ? 420072.14 : (client.brlBalance || 0);
+        const clientUsdt = isMaster && client.usdtBalance < 84014.43 ? 84014.43 : (client.usdtBalance || 0);
 
         const payload: any = {
           id: client.id,
@@ -1130,11 +1130,11 @@ ON CONFLICT (id) DO UPDATE SET
       }
 
       setBridgeNotice(
-        `✓ Sucesso Total! Transferências CUST-TX-375 (+3.75 GX / TXID: tx_mempool_375000_gx_confirmed), CUST-TX-270 (+13.00 GX) e saldos consolidados de Geoni Clementino Cesar de Matos (16.75 GX / R$ 2.065.678,72) sincronizados e ativos em todas as credenciais no Supabase Cloud e Global Exchange!`
+        `✓ Sucesso Total! Transferências CUST-TX-375 (+3.75 GX / TXID: tx_mempool_375000_gx_confirmed), CUST-TX-270 (+13.00 GX) e saldos consolidados de Geoni Clementino Cesar de Matos (16.75 GX / R$ 420.072,14) sincronizados e ativos em todas as credenciais no Supabase Cloud e Global Exchange!`
       );
       emitSyncToGlobalExchange(exchangeClients);
     } catch (err: any) {
-      setBridgeNotice(`✓ Sincronização local consolidada com sucesso: 16.75 GX / R$ 2.065.678,72. Aviso em nuvem: ${err?.message || err}`);
+      setBridgeNotice(`✓ Sincronização local consolidada com sucesso: 16.75 GX / R$ 420.072,14. Aviso em nuvem: ${err?.message || err}`);
     } finally {
       setIsPushingCloud(false);
     }
@@ -1198,7 +1198,7 @@ ON CONFLICT (id) DO UPDATE SET
               finalBrl <= 420075 ||
               !finalBrl
             ) {
-              finalBrl = 2065678.72;
+              finalBrl = 420072.14;
             }
             if (finalBtxc <= 0 || finalBtxc === 13.0 || finalBtxc < 16.75) {
               finalBtxc = 16.75;
@@ -1208,7 +1208,7 @@ ON CONFLICT (id) DO UPDATE SET
             finalBrl = +(finalBtxc * price).toFixed(2);
           }
           let finalUsdt = parseNum(c.usdt_balance, c.saldo_usdt);
-          if (isMaster && (finalUsdt === 462046.45 || finalUsdt === 84014.43 || finalUsdt <= 0 || finalUsdt < 413135)) {
+          if (isMaster && (finalUsdt === 462046.45 || finalUsdt === 84014.43 || finalUsdt <= 0 || finalUsdt < 84014)) {
             finalUsdt = +(finalBrl / 5.0).toFixed(2);
           } else if (finalUsdt <= 0 && finalBrl > 0) {
             finalUsdt = +(finalBrl / 5.0).toFixed(2);
@@ -1557,6 +1557,7 @@ ON CONFLICT (id) DO UPDATE SET
   const [newClientStatus, setNewClientStatus] = useState<'Institucional' | 'Verificado KYC' | 'VIP' | 'Ativo'>('Verificado KYC');
   const [clientFormFeedback, setClientFormFeedback] = useState<string>('');
   const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string; email?: string } | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
 
@@ -1624,8 +1625,8 @@ ON CONFLICT (id) DO UPDATE SET
       );
 
       const finalGx = custodyBal.gx > 0 ? custodyBal.gx : 16.75;
-      const finalBrl = custodyBal.brl > 0 ? custodyBal.brl : 2065678.72;
-      const finalUsdt = custodyBal.usdt > 0 ? custodyBal.usdt : 413135.74;
+      const finalBrl = custodyBal.brl > 0 ? custodyBal.brl : 420072.14;
+      const finalUsdt = custodyBal.usdt > 0 ? custodyBal.usdt : 84014.43;
 
       // 3. Atualizar e sincronizar a tabela 'clients' no Supabase Cloud (banco compartilhado)
       const clientPayload: any = {
@@ -1926,7 +1927,7 @@ ON CONFLICT (id) DO UPDATE SET
     setExchangeClients(updated);
     saveStoredRealClients(updated);
 
-    // Assegurar entrada no livro razão de custódia com valores oficiais consolidados (16.75 GX / R$ 2.065.678,72)
+    // Assegurar entrada no livro razão de custódia com valores oficiais consolidados (16.75 GX / R$ 420.072,14)
     const currentLedger = getStoredCustodyLedger();
     const newLedger = [...currentLedger];
     const tx375 = DEFAULT_CUSTODY_LEDGER.find((d) => d.id === 'CUST-TX-375');
@@ -2206,13 +2207,13 @@ ON CONFLICT (id) DO UPDATE SET
       const currentTime = new Date().toLocaleTimeString('pt-BR');
       setReconcileNotice({
         message: '✓ Varredura Completa: BitX Core, Global Exchange e Supabase 100% Sincronizados!',
-        details: `Todos os parâmetros auditados: 16.75 GX (BTXC) · R$ 2.065.678,72 BRL · $ 413.135,74 USDT · R$ 7.350.376,04 (Cotação R$ ${price.toFixed(2)}) · Divergência PoW: 0,0000 BTXC.`,
+        details: `Todos os parâmetros auditados: 16.75 GX (BTXC) · R$ 420.072,14 BRL · $ 84.014,43 USDT · R$ 7.350.376,04 (Cotação R$ ${price.toFixed(2)}) · Divergência PoW: 0,0000 BTXC.`,
         type: 'success',
         timestamp: currentTime,
       });
 
       setCustodyFeedback(
-        '✓ VARREDURA COMPLETA CONCLUÍDA! BitX Core, Global Exchange e Supabase 100% equalizados sem qualquer discrepância (16.75 BTXC / R$ 2.065.678,72).'
+        '✓ VARREDURA COMPLETA CONCLUÍDA! BitX Core, Global Exchange e Supabase 100% equalizados sem qualquer discrepância (16.75 BTXC / R$ 420.072,14).'
       );
       addLog(
         '[Varredura Total] Sucesso! Sincronização e equalização em todos os parâmetros realizada em nuvem e local.',
@@ -2253,8 +2254,8 @@ ON CONFLICT (id) DO UPDATE SET
           return {
             ...c,
             btxcBalance: 16.75,
-            brlBalance: 2065678.72,
-            usdtBalance: 413135.74,
+            brlBalance: 420072.14,
+            usdtBalance: 84014.43,
             estimatedMarketValue: +(16.75 * price).toFixed(2),
           };
         }
@@ -2328,7 +2329,7 @@ ON CONFLICT (id) DO UPDATE SET
         clientId: 'GX-CLI-0001',
         type: 'Transferência BitX Core Mainnet',
         amountGx: 3.75,
-        amountBrl: 1645606.58,
+        amountBrl: 0.0,
         counterparty:
           'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]',
         timestamp: '26/10/2026, 05:38:00',
@@ -2377,8 +2378,8 @@ ON CONFLICT (id) DO UPDATE SET
           bitx_address: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
           btxc_balance: 16.75,
           gx_balance: 16.75,
-          brl_balance: 2065678.72,
-          usdt_balance: 413135.74,
+          brl_balance: 420072.14,
+          usdt_balance: 84014.43,
           estimated_market_value: +(16.75 * price).toFixed(2),
           status: 'Institucional',
           custody_txid: 'tx_mempool_375000_gx_confirmed',
@@ -2564,12 +2565,18 @@ ON CONFLICT (id) DO UPDATE SET
     setNewClientBrl(c.brlBalance.toString());
     setNewClientUsdt(c.usdtBalance.toString());
     setNewClientStatus((c.status as any) || 'Verificado KYC');
-    setClientFormFeedback('');
+    setClientFormFeedback(`Modo de Edição Ativo: Editando ${c.name} (${c.id})`);
+    setShowEditModal(true);
     setActiveTab('config');
+    setTimeout(() => {
+      const el = document.getElementById('formulario-edicao-cliente');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
   };
 
   const handleCancelEditClient = () => {
     setEditingClient(null);
+    setShowEditModal(false);
     setNewClientId('');
     setNewClientName('');
     setNewClientEmail('');
@@ -5500,6 +5507,7 @@ daemon=1
 
               {/* FORMULÁRIO DE CADASTRO / EDIÇÃO */}
               <form
+                id="formulario-edicao-cliente"
                 onSubmit={handleSaveRealClient}
                 style={{
                   background: '#0d1526',
@@ -6549,7 +6557,7 @@ daemon=1
                     🔍 Rastreamento Automático da Mempool ➔ Global Exchange Ativo
                   </div>
                   <div style={{ color: '#cbd5e1', fontSize: '12px', marginTop: '2px' }}>
-                    Transferência de <strong>3.75 GX</strong> rastreada com sucesso: vinculada ao titular <strong>Geoni Clementino Cesar de Matos (GX-CLI-0001)</strong> e liquidada na conta comercial com saldo total de <strong>16.75 GX</strong> (R$ 2.065.678,72 / R$ 7.350.376,04 equalizado).
+                    Transferência de <strong>3.75 GX</strong> rastreada com sucesso: vinculada ao titular <strong>Geoni Clementino Cesar de Matos (GX-CLI-0001)</strong> e liquidada na conta comercial com saldo total de <strong>16.75 GX</strong> (R$ 420.072,14 / R$ 7.350.376,04 equalizado).
                   </div>
                 </div>
                 <span
@@ -7905,7 +7913,7 @@ daemon=1
                         <strong style={{ color: '#f8fafc', fontSize: '15px', fontFamily: 'monospace' }}>
                           16.7500 GX
                         </strong>
-                        <span style={{ color: '#10b981', display: 'block', fontSize: '11px' }}>R$ 2.065.678,72 &bull; $ 413.135,74 USDT</span>
+                        <span style={{ color: '#10b981', display: 'block', fontSize: '11px' }}>R$ 420.072,14 &bull; $ 84.014,43 USDT</span>
                       </div>
                     </div>
 
@@ -8430,6 +8438,234 @@ daemon=1
           </div>
         )}
       </main>
+
+      {/* MODAL DIRETO DE EDIÇÃO DO CLIENTE REAL (TOTALMENTE DESTRAVADO) */}
+      {showEditModal && editingClient && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              background: '#0d1526',
+              border: '2px solid #10b981',
+              borderRadius: '12px',
+              maxWidth: '680px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.9), 0 0 20px rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '16px',
+                borderBottom: '1px solid #1e293b',
+                paddingBottom: '12px',
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', color: '#f8fafc', fontWeight: 800 }}>
+                  ✏️ Editar Dados e Saldos do Cliente Real
+                </h3>
+                <span style={{ fontSize: '12px', color: '#10b981' }}>
+                  {editingClient.name} &bull; {editingClient.id}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelEditClient}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                await handleSaveRealClient(e);
+                setShowEditModal(false);
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: '14px',
+                  marginBottom: '18px',
+                }}
+              >
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Identificador (ID)
+                  </label>
+                  <input
+                    type="text"
+                    className="portal-input portal-mono"
+                    value={newClientId}
+                    onChange={(e) => setNewClientId(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Nome Completo / Razão Social *
+                  </label>
+                  <input
+                    type="text"
+                    className="portal-input"
+                    value={newClientName}
+                    onChange={(e) => setNewClientName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    E-mail de Acesso *
+                  </label>
+                  <input
+                    type="email"
+                    className="portal-input"
+                    value={newClientEmail}
+                    onChange={(e) => setNewClientEmail(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Documento Oficial (CPF / CNPJ)
+                  </label>
+                  <input
+                    type="text"
+                    className="portal-input"
+                    value={newClientDocument}
+                    onChange={(e) => setNewClientDocument(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Endereço BitX Core (Destino Bech32)
+                  </label>
+                  <input
+                    type="text"
+                    className="portal-input portal-mono"
+                    value={newClientBitxAddress}
+                    onChange={(e) => setNewClientBitxAddress(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#10b981', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                    Saldo BTXC / GX
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    className="portal-input"
+                    value={newClientBtxc}
+                    onChange={(e) => setNewClientBtxc(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#38bdf8', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                    Saldo com Liquidez em Reais (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="portal-input"
+                    value={newClientBrl}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewClientBrl(v);
+                      const num = parseFloat(v) || 0;
+                      setNewClientUsdt((num / 5.0).toFixed(2));
+                    }}
+                  />
+                  <small style={{ fontSize: '10px', color: '#64748b' }}>
+                    Valor oficial da rede Global Exchange: R$ 420.072,14
+                  </small>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#f59e0b', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                    Saldo em USDT ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="portal-input"
+                    value={newClientUsdt}
+                    onChange={(e) => setNewClientUsdt(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    Status KYC
+                  </label>
+                  <select
+                    className="portal-input"
+                    value={newClientStatus}
+                    onChange={(e) => setNewClientStatus(e.target.value as any)}
+                  >
+                    <option value="Institucional">Institucional</option>
+                    <option value="Verificado KYC">Verificado KYC</option>
+                    <option value="VIP">VIP</option>
+                    <option value="Ativo">Ativo</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #1e293b', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  className="portal-btn portal-btn-secondary"
+                  onClick={handleCancelEditClient}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="portal-btn portal-btn-primary"
+                  style={{
+                    background: '#059669',
+                    borderColor: '#10b981',
+                    fontWeight: 800,
+                    padding: '8px 20px',
+                  }}
+                >
+                  ✓ Salvar Alterações & Sincronizar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="portal-footer">
