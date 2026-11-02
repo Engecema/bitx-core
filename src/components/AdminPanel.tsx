@@ -301,11 +301,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <input
                     type="text"
                     id="username"
-                    placeholder="Digite seu usuário ou e-mail"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="new-password"
-                    style={{ backgroundImage: 'none' }}
                     required
                   />
                 </div>
@@ -315,11 +312,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <input
                       type={showPassword ? 'text' : 'password'}
                       id="password"
-                      placeholder="Digite sua senha"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      autoComplete="new-password"
-                      style={{ backgroundImage: 'none' }}
                       required
                     />
                     <button
@@ -552,8 +546,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       placeholder="Novo usuário"
                       value={newUser}
                       onChange={(e) => setNewUser(e.target.value)}
-                      autoComplete="new-password"
-                      style={{ marginBottom: '6px', backgroundImage: 'none' }}
+                      style={{ marginBottom: '6px' }}
                       required
                     />
                     <div className="admin-password-field-group">
@@ -562,8 +555,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         placeholder="Senha do novo usuário"
                         value={newPass}
                         onChange={(e) => setNewPass(e.target.value)}
-                        autoComplete="new-password"
-                        style={{ backgroundImage: 'none' }}
                         required
                       />
                       <button

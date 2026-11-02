@@ -1062,7 +1062,7 @@ ON CONFLICT (id) DO UPDATE SET
 
         try {
           if (isMaster) {
-            // Sincronizar todos os e-mails de login autorizados do titular (Google Auth / Institucional)
+            // Sincronizar todos os possíveis e-mails de login do titular (Hotmail e Gmail/Google Auth)
             const aliasClementino = {
               ...payload,
               id: 'GX-CLI-0001-C',
@@ -4969,11 +4969,11 @@ daemon=1
                     className="portal-btn portal-btn-secondary"
                     style={{ fontSize: '12px', padding: '6px 12px', borderColor: '#334155', color: '#94a3b8' }}
                     onClick={() => {
-                      updateOperatorsAndPersist(DEFAULT_REAL_OPERATORS, '🧹 Lista de operadores restaurada com sucesso!');
+                      updateOperatorsAndPersist(DEFAULT_REAL_OPERATORS, '🧹 Lista de operadores restaurada com sucesso: apenas geonimatos31@gmail.com!');
                       notifyCloudOperators(DEFAULT_REAL_OPERATORS);
-                      addLog('[Acessos] Lista de operadores administrativos purificada.', 'success');
+                      addLog('[Acessos] Lista purificada mantendo apenas operador oficial geonimatos31@gmail.com.', 'success');
                     }}
-                    title="Restaura a lista de operadores administrativos padrão"
+                    title="Restaura a lista mantendo unicamente geonimatos31@gmail.com"
                   >
                     🔄 Purificar / Manter Somente Operador Oficial
                   </button>

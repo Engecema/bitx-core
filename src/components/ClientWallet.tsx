@@ -843,7 +843,7 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
                           <input
                             id="unlockPassword"
                             type="password"
-                            autoComplete="new-password"
+                            autoComplete="current-password"
                             required
                             placeholder="Senha de acesso local"
                             value={unlockPassword}
