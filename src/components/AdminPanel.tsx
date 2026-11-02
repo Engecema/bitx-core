@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/admin.css';
+import { persistentVault } from '../utils/persistentVault';
 
 interface AdminPanelProps {
   onNavigateToSite: () => void;
@@ -22,8 +23,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return sessionStorage.getItem('bitx_admin_session') === 'active';
   });
 
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('bitx123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -56,7 +57,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const stored = localStorage.getItem('bitx_users');
       if (stored) return JSON.parse(stored);
     } catch {}
-    return { admin: 'bitx123' };
+    return {};
   });
   const [newUser, setNewUser] = useState('');
   const [newPass, setNewPass] = useState('');
@@ -96,19 +97,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const u = username.trim();
     const p = password;
 
-    if ((users[u] && users[u] === p) || (u === 'admin' && (p === 'bitx123' || p === 'admin'))) {
+    if (!u || !p) {
+      setErrorMessage('Informe o usuário e a senha cadastrados.');
+      return;
+    }
+
+    // 1. Validar contra o Cofre Desktop do Administrador Geral
+    const vaultRes = await persistentVault.validateAdminLogin(u, p);
+    if (vaultRes.valid) {
       setErrorMessage('');
       sessionStorage.setItem('bitx_admin_session', 'active');
       sessionStorage.setItem('bitx_admin_user', u);
       setIsAuthenticated(true);
-    } else {
-      setErrorMessage('Usuário ou senha incorretos.');
+      return;
     }
+
+    // 2. Validar contra usuários locais cadastrados
+    if (users[u] && users[u] === p) {
+      setErrorMessage('');
+      sessionStorage.setItem('bitx_admin_session', 'active');
+      sessionStorage.setItem('bitx_admin_user', u);
+      setIsAuthenticated(true);
+      return;
+    }
+
+    setErrorMessage(vaultRes.reason || 'Usuário ou senha incorretos.');
   };
 
   const handleLogout = () => {
@@ -144,7 +162,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTxAmount('');
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const u = newUser.trim();
     const p = newPass;
@@ -154,6 +172,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setUsers(updated);
     try {
       localStorage.setItem('bitx_users', JSON.stringify(updated));
+      await persistentVault.saveGeneralAdmin({
+        name: u,
+        username: u,
+        email: `${u}@bitxcore.local`,
+        password: p,
+      });
     } catch {}
 
     setNewUser('');
@@ -161,9 +185,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleDeleteUser = (u: string) => {
-    if (u === 'admin') {
-      return;
-    }
     const updated = { ...users };
     delete updated[u];
     setUsers(updated);

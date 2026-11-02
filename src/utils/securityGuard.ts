@@ -8,6 +8,8 @@
  * 4. Isolamento e controle de abort de requisições ativas da blockchain
  */
 
+import { persistentVault } from './persistentVault';
+
 export interface SecurityStatus {
   isLocked: boolean;
   lockReason: string | null;
@@ -106,9 +108,48 @@ class BitXSecurityGuard {
         } catch {}
       });
 
-      // 4. Limpeza total de storages do navegador
-      localStorage.clear();
+      // 3.1. Backup do Cofre Desktop do Administrador Geral
+      let vaultBackup: string | null = null;
+      try {
+        vaultBackup = persistentVault.backupVaultForPurge();
+      } catch {}
+
+      // 4. Limpeza de chaves de sessão e storages voláteis
+      const protectedKeys = [
+        'bitx_desktop_secure_vault_mirror_v1',
+        'bitx_ge_admin_operators_v3',
+        'bitx_users',
+      ];
+      const protectedValues: Record<string, string> = {};
+      protectedKeys.forEach((k) => {
+        try {
+          const val = localStorage.getItem(k);
+          if (val) protectedValues[k] = val;
+        } catch {}
+      });
+
+      // Limpeza total de sessionStorage (sessões voláteis)
       sessionStorage.clear();
+
+      // Limpeza seletiva de localStorage preservando o cofre desktop
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && !protectedKeys.includes(key)) {
+            localStorage.removeItem(key);
+          }
+        }
+
+        // Reafirmar registros protegidos do Administrador Geral
+        Object.entries(protectedValues).forEach(([k, v]) => {
+          localStorage.setItem(k, v);
+        });
+
+        // Restaurar cofre no persistentVault
+        if (vaultBackup) {
+          persistentVault.restoreVaultAfterPurge(vaultBackup);
+        }
+      } catch {}
 
       // 5. Limpeza de cookies de sessão (se acessíveis via JS)
       try {

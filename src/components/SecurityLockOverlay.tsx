@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   RefreshCw,
@@ -14,8 +14,12 @@ import {
   ArrowLeft,
   AlertCircle,
   Fingerprint,
+  HardDrive,
+  FileCode,
+  Edit3,
 } from 'lucide-react';
 import { securityGuard, SecurityStatus } from '../utils/securityGuard';
+import { persistentVault, GeneralAdminRecord } from '../utils/persistentVault';
 
 interface SecurityLockOverlayProps {
   status: SecurityStatus;
@@ -34,16 +38,20 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   const [treeInstanceKey, setTreeInstanceKey] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
 
+  // Estado do cofre persistente desktop / Electron
+  const [vaultAdmin, setVaultAdmin] = useState<GeneralAdminRecord | null>(null);
+  const [vaultInitialized, setVaultInitialized] = useState(false);
+
   // Provedor e modo de rede
   const [providerMode, setProviderMode] = useState<'mainnet' | 'local_rpc'>('mainnet');
   const [customRpcUrl, setCustomRpcUrl] = useState('http://127.0.0.1:8332');
 
-  // Estado da aba 'Acessar Painel' (Login/Senha)
-  const [loginUsername, setLoginUsername] = useState('admin');
-  const [loginPassword, setLoginPassword] = useState('bitx123');
+  // Estado da aba 'Acessar Painel' (Login/Senha) — Limpo, editável e SEM credenciais hardcoded
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  // Estado da aba 'Cadastrar Administrador Geral' (Pessoal)
+  // Estado da aba 'Cadastrar Administrador Geral' (Pessoal) — Totalmente editável
   const [regFullName, setRegFullName] = useState('');
   const [regDocument, setRegDocument] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -52,11 +60,36 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   const [regPasswordConfirm, setRegPasswordConfirm] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showRegConfirm, setShowRegConfirm] = useState(false);
+  const [isEditingExisting, setIsEditingExisting] = useState(false);
 
   // Estados de feedback de validação e carregamento
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Sincronizar dados do cofre ao carregar
+  useEffect(() => {
+    let isMounted = true;
+    persistentVault.ready().then(() => {
+      if (!isMounted) return;
+      const admin = persistentVault.getGeneralAdmin();
+      setVaultAdmin(admin);
+      setVaultInitialized(true);
+
+      // Se já houver um admin cadastrado, preenche os campos de cadastro para facilitar a edição
+      if (admin) {
+        setRegFullName(admin.name);
+        setRegDocument(admin.document);
+        setRegEmail(admin.email);
+        setRegUsername(admin.username);
+        setIsEditingExisting(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [treeInstanceKey]);
 
   /**
    * Disparado quando o operador clica em:
@@ -66,14 +99,21 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   const handleStartReinitialization = () => {
     setIsProcessing(true);
     setTimeout(() => {
-      // Incrementa a chave para forçar re-renderização e montagem do zero
       setTreeInstanceKey((prev) => prev + 1);
       setAuthError(null);
       setAuthSuccess(null);
       setScreen('auth_tree');
-      setActiveTab('login');
+
+      // Se não há admin registrado no cofre, direciona inteligentemente para o cadastro
+      const currentAdmin = persistentVault.getGeneralAdmin();
+      if (!currentAdmin) {
+        setActiveTab('register_admin');
+      } else {
+        setActiveTab('login');
+      }
+
       setIsProcessing(false);
-    }, 450);
+    }, 400);
   };
 
   /**
@@ -81,11 +121,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
    */
   const finalizeUnlock = (operatorName: string, username: string, role: string) => {
     try {
-      // Registrar configuração efêmera de RPC se fornecida
       if (providerMode === 'local_rpc' && customRpcUrl) {
         sessionStorage.setItem('bitx_ephemeral_rpc', customRpcUrl);
       }
-      // Sessão de operador autenticado
       sessionStorage.setItem('bitx_admin_session', 'active');
       sessionStorage.setItem(
         'bitx_operator_session',
@@ -101,21 +139,21 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
       console.warn('[BitX Auth] Armazenamento de sessão volátil:', e);
     }
 
-    // Desbloqueia o SecurityGuard e reconstrói a árvore de componentes do App
     securityGuard.unlock();
     onReinitialize();
   };
 
   /**
    * Submissão da Aba "Acessar Painel" (Login/Senha)
+   * Valida estritamente contra o cofre desktop persistido (IndexedDB / Electron JSON)
    */
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     setAuthSuccess(null);
 
     const userClean = loginUsername.trim();
-    const passClean = loginPassword.trim();
+    const passClean = loginPassword;
 
     if (!userClean || !passClean) {
       setAuthError('Informe o usuário e a senha para autenticação do operador.');
@@ -124,68 +162,34 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
     setIsProcessing(true);
 
-    setTimeout(() => {
-      // 1. Verificar credenciais salvas em bitx_users
-      let registeredUsers: Record<string, string> = {
-        admin: 'bitx123',
-        'geonimatos31@gmail.com': 'bitx123',
-      };
+    try {
+      // Validação estrita contra o cofre persistido
+      const validation = await persistentVault.validateAdminLogin(userClean, passClean);
 
-      try {
-        const storedUsersRaw = localStorage.getItem('bitx_users');
-        if (storedUsersRaw) {
-          registeredUsers = { ...registeredUsers, ...JSON.parse(storedUsersRaw) };
-        }
-      } catch {}
-
-      // 2. Verificar operadores institucionais
-      let operatorName = userClean === 'admin' ? 'Administrador Geral' : userClean;
-      let userRole = 'Super Admin';
-
-      try {
-        const opsRaw = localStorage.getItem('bitx_ge_admin_operators_v3');
-        if (opsRaw) {
-          const ops = JSON.parse(opsRaw);
-          if (Array.isArray(ops)) {
-            const match = ops.find(
-              (o: any) =>
-                o.username?.toLowerCase() === userClean.toLowerCase() ||
-                o.email?.toLowerCase() === userClean.toLowerCase()
-            );
-            if (match) {
-              operatorName = match.name || operatorName;
-              userRole = match.role || userRole;
-            }
-          }
-        }
-      } catch {}
-
-      const expectedPass = registeredUsers[userClean];
-
-      // Aceita credencial conhecida ou senha mestre de recuperação
-      if (expectedPass && expectedPass === passClean) {
-        setAuthSuccess(`Autenticação confirmada para ${operatorName}. Inicializando painel...`);
+      if (validation.valid && validation.admin) {
+        const admin = validation.admin;
+        setAuthSuccess(`Autenticação confirmada para ${admin.name} (Administrador Geral). Desbloqueando...`);
         setTimeout(() => {
-          finalizeUnlock(operatorName, userClean, userRole);
-        }, 600);
-      } else if (userClean === 'admin' && passClean === 'bitx123') {
-        setAuthSuccess('Acesso mestre concedido. Montando painel operacional...');
-        setTimeout(() => {
-          finalizeUnlock('Administrador Geral (Root)', 'admin', 'Super Admin');
-        }, 600);
+          finalizeUnlock(admin.name, admin.username, admin.role);
+        }, 500);
       } else {
         setIsProcessing(false);
         setAuthError(
-          'Credenciais não autorizadas. Verifique o usuário e senha ou cadastre um Administrador Geral.'
+          validation.reason ||
+            'Credenciais inválidas. Verifique o usuário e senha ou cadastre um Administrador Geral.'
         );
       }
-    }, 500);
+    } catch (err: any) {
+      setIsProcessing(false);
+      setAuthError('Falha ao comunicar com o cofre desktop de credenciais.');
+    }
   };
 
   /**
    * Submissão da Aba "Cadastrar Administrador Geral" (Pessoal)
+   * Salva e persiste os dados de forma permanente no ambiente desktop (Electron / IndexedDB)
    */
-  const handleRegisterAdminSubmit = (e: React.FormEvent) => {
+  const handleRegisterAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     setAuthSuccess(null);
@@ -197,73 +201,49 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
     const pass = regPassword.trim();
     const passConfirm = regPasswordConfirm.trim();
 
-    if (!name || !email || !user || !pass) {
-      setAuthError('Preencha os campos obrigatórios para o cadastro de Administrador Geral.');
+    if (!name || !email || !user) {
+      setAuthError('Nome Completo, E-mail e Usuário são obrigatórios.');
       return;
     }
 
-    if (pass.length < 6) {
-      setAuthError('A senha do Administrador Geral deve conter no mínimo 6 caracteres.');
-      return;
-    }
+    // Se estiver criando novo ou alterando senha
+    if (!isEditingExisting || pass.length > 0) {
+      if (pass.length < 6) {
+        setAuthError('A senha do Administrador Geral deve conter no mínimo 6 caracteres.');
+        return;
+      }
 
-    if (pass !== passConfirm) {
-      setAuthError('A confirmação de senha não coincide com a senha mestra informada.');
-      return;
+      if (pass !== passConfirm) {
+        setAuthError('A confirmação de senha não coincide com a senha mestra informada.');
+        return;
+      }
     }
 
     setIsProcessing(true);
 
-    setTimeout(() => {
-      try {
-        // Gravar no bitx_users
-        let currentUsers: Record<string, string> = { admin: 'bitx123' };
-        try {
-          const raw = localStorage.getItem('bitx_users');
-          if (raw) currentUsers = { ...currentUsers, ...JSON.parse(raw) };
-        } catch {}
+    try {
+      const savedRecord = await persistentVault.saveGeneralAdmin({
+        name,
+        username: user,
+        email,
+        document: doc || 'Identificação Pessoal / Oficial',
+        password: pass || undefined,
+      });
 
-        currentUsers[user] = pass;
-        localStorage.setItem('bitx_users', JSON.stringify(currentUsers));
+      setVaultAdmin(savedRecord);
+      setIsEditingExisting(true);
 
-        // Gravar na lista de operadores institucionais
-        let operatorsList: any[] = [];
-        try {
-          const rawOps = localStorage.getItem('bitx_ge_admin_operators_v3');
-          if (rawOps) {
-            const parsed = JSON.parse(rawOps);
-            if (Array.isArray(parsed)) operatorsList = parsed;
-          }
-        } catch {}
+      setAuthSuccess(
+        `Administrador Geral "${savedRecord.name}" gravado com sucesso no arquivo seguro do app! Desbloqueando painel...`
+      );
 
-        const newAdminRecord = {
-          id: `GX-ADM-${String(operatorsList.length + 1).padStart(4, '0')}`,
-          name,
-          username: user,
-          email,
-          document: doc || 'Pessoal/Institucional',
-          role: 'Super Admin',
-          status: 'Ativo',
-          createdAt: new Date().toLocaleDateString('pt-BR'),
-        };
-
-        // Adicionar ou atualizar operador
-        operatorsList = operatorsList.filter((op: any) => op.username !== user);
-        operatorsList.unshift(newAdminRecord);
-        localStorage.setItem('bitx_ge_admin_operators_v3', JSON.stringify(operatorsList));
-
-        setAuthSuccess(
-          `Administrador Geral "${name}" cadastrado com sucesso! Desbloqueando e montando painel...`
-        );
-
-        setTimeout(() => {
-          finalizeUnlock(name, user, 'Super Admin');
-        }, 750);
-      } catch (err) {
-        setIsProcessing(false);
-        setAuthError('Erro ao gravar novo Administrador Geral no ambiente de segurança.');
-      }
-    }, 600);
+      setTimeout(() => {
+        finalizeUnlock(savedRecord.name, savedRecord.username, savedRecord.role);
+      }, 600);
+    } catch (err: any) {
+      setIsProcessing(false);
+      setAuthError(err.message || 'Erro ao persistir o Administrador Geral no cofre desktop.');
+    }
   };
 
   return (
@@ -386,7 +366,49 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               </div>
             </div>
 
-            {/* Audit Checklist */}
+            {/* Status do Cofre Persistente Desktop */}
+            <div
+              style={{
+                background: '#222222',
+                border: '1px solid #2a2a2a',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <HardDrive size={18} color="#22c55e" />
+                <div>
+                  <div style={{ color: '#ffffff', fontWeight: 600 }}>
+                    Cofre Desktop Local (admin_general.json)
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '11px' }}>
+                    {vaultAdmin
+                      ? `Administrador Geral ativo: ${vaultAdmin.name} (@${vaultAdmin.username})`
+                      : 'Nenhum administrador registrado ainda (configure na re-inicialização)'}
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  background: vaultAdmin ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                  color: vaultAdmin ? '#22c55e' : '#eab308',
+                  border: `1px solid ${vaultAdmin ? '#22c55e' : '#eab308'}`,
+                  borderRadius: '4px',
+                  padding: '3px 8px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                }}
+              >
+                {vaultAdmin ? 'COFRE PERSISTIDO' : 'AGUARDANDO CADASTRO'}
+              </div>
+            </div>
+
+            {/* Checklist de Preservação */}
             <div style={{ marginBottom: '24px' }}>
               <div
                 style={{
@@ -398,7 +420,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   letterSpacing: '0.5px',
                 }}
               >
-                Protocolo de Purga Executado
+                Protocolo de Purga Volátil & Preservação do Cofre
               </div>
               <div
                 style={{
@@ -422,8 +444,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <CheckCircle2 size={16} color="#22c55e" />
                   <span>
-                    <strong>LocalStorage & SessionStorage:</strong> Sanitizados com ruído randômico
-                    (CSPRNG) e limpos.
+                    <strong>Cofre do Administrador Geral:</strong> Persistência em arquivo desktop JSON
+                    / IndexedDB protegida contra limpeza de storage e unmount.
                   </span>
                 </div>
                 <div
@@ -437,8 +459,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <CheckCircle2 size={16} color="#22c55e" />
                   <span>
-                    <strong>Chaves Privadas & Seeds em Memória:</strong> Referências destruídas e
-                    instâncias React desmontadas.
+                    <strong>Sessões & Chaves Privadas Voláteis:</strong> Destruídas imediatamente da
+                    memória (Zero-State Purge).
                   </span>
                 </div>
                 <div
@@ -452,8 +474,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <CheckCircle2 size={16} color="#22c55e" />
                   <span>
-                    <strong>Canais RPC e Sincronização:</strong> Sinais de cancelamento
-                    (AbortSignal) disparados para a rede.
+                    <strong>Autenticação Limpa:</strong> Sem credenciais hardcoded. Login valida
+                    diretamente contra o registro persistido.
                   </span>
                 </div>
               </div>
@@ -502,8 +524,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   marginTop: '4px',
                 }}
               >
-                Esta ação monta a árvore de autenticação do zero em ambiente volátil e independente
-                do navegador.
+                Monta a árvore de autenticação do zero conectada ao arquivo seguro de credenciais
+                do app.
               </div>
             </div>
           </div>
@@ -516,7 +538,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
           key={`bitx-auth-tree-instance-${treeInstanceKey}`}
           style={{
             width: '100%',
-            maxWidth: '640px',
+            maxWidth: '660px',
             background: '#111111',
             border: '1px solid #222222',
             borderRadius: '12px',
@@ -571,7 +593,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     color: '#94a3b8',
                   }}
                 >
-                  Ambiente Isolado • Independente de Navegador • Zero-State Rebuilt
+                  Cofre Desktop: <code>~/.bitx/vault/admin_general.json</code> • Sistema Limpo & Editável
                 </p>
               </div>
             </div>
@@ -666,8 +688,12 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 transition: 'all 0.15s ease',
               }}
             >
-              <UserPlus size={16} />
-              <span>Cadastrar Administrador Geral (Pessoal)</span>
+              {isEditingExisting ? <Edit3 size={16} /> : <UserPlus size={16} />}
+              <span>
+                {isEditingExisting
+                  ? 'Editar Administrador Geral (Pessoal)'
+                  : 'Cadastrar Administrador Geral (Pessoal)'}
+              </span>
             </button>
           </div>
 
@@ -718,6 +744,68 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             {/* ABA 1: ACESSAR PAINEL (LOGIN/SENHA) */}
             {activeTab === 'login' && (
               <form onSubmit={handleLoginSubmit} autoComplete="off">
+                {/* Dica informativa se o cofre estiver vazio */}
+                {!vaultAdmin && (
+                  <div
+                    style={{
+                      background: '#222222',
+                      border: '1px solid #eab308',
+                      borderRadius: '8px',
+                      padding: '12px 14px',
+                      marginBottom: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                  >
+                    <AlertCircle size={18} color="#eab308" style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '11px', color: '#fef08a' }}>
+                      Nenhum Administrador Geral encontrado no cofre persistente local. Clique na aba{' '}
+                      <strong>"Cadastrar Administrador Geral (Pessoal)"</strong> para definir a
+                      credencial mestre do sistema.
+                    </div>
+                  </div>
+                )}
+
+                {/* Indicação de credencial registrada no cofre */}
+                {vaultAdmin && (
+                  <div
+                    style={{
+                      background: '#222222',
+                      border: '1px solid #2a2a2a',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      marginBottom: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
+                      <HardDrive size={14} color="#f97316" />
+                      <span>
+                        Administrador no cofre: <strong style={{ color: '#ffffff' }}>{vaultAdmin.name}</strong> (@{vaultAdmin.username})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLoginUsername(vaultAdmin.username)}
+                      style={{
+                        background: '#111111',
+                        border: '1px solid #333333',
+                        color: '#f97316',
+                        borderRadius: '4px',
+                        padding: '2px 8px',
+                        fontSize: '10px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Preencher Usuário
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ marginBottom: '16px' }}>
                   <label
                     htmlFor="bitx-login-user"
@@ -739,7 +827,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="text"
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
-                      placeholder="admin ou geonimatos31@gmail.com"
+                      placeholder="Informe o usuário cadastrado no cofre"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -762,7 +850,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     />
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Padrão inicial do sistema: <code>admin</code> (ou email do operador cadastrado)
+                    Validação em tempo real contra o arquivo local <code>admin_general.json</code>
                   </div>
                 </div>
 
@@ -779,7 +867,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       letterSpacing: '0.5px',
                     }}
                   >
-                    Senha de Acesso
+                    Senha de Acesso Mestra
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -787,7 +875,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type={showLoginPassword ? 'text' : 'password'}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="Informe sua senha cadastrada"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -825,9 +913,6 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     >
                       {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Padrão inicial de fábrica: <code>bitx123</code>
                   </div>
                 </div>
 
@@ -942,13 +1027,13 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <Lock size={16} />
                   <span>
-                    {isProcessing ? 'Validando Credenciais...' : 'Autenticar e Entrar no Painel'}
+                    {isProcessing ? 'Validando no Cofre Desktop...' : 'Autenticar e Entrar no Painel'}
                   </span>
                 </button>
               </form>
             )}
 
-            {/* ABA 2: CADASTRAR ADMINISTRADOR GERAL (PESSOAL) */}
+            {/* ABA 2: CADASTRAR / EDITAR ADMINISTRADOR GERAL (PESSOAL) */}
             {activeTab === 'register_admin' && (
               <form onSubmit={handleRegisterAdminSubmit} autoComplete="off">
                 <div
@@ -960,13 +1045,36 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     marginBottom: '16px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  <Fingerprint size={20} color="#f97316" style={{ flexShrink: 0 }} />
-                  <div style={{ fontSize: '11px', color: '#cbd5e1' }}>
-                    Cadastro de <strong>Administrador Geral (Pessoal)</strong> com autoridade root,
-                    custódia total e privilégios irrestritos no nó BitX Core e na Global Exchange.
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Fingerprint size={20} color="#f97316" style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '11px', color: '#cbd5e1' }}>
+                      {isEditingExisting ? (
+                        <span>
+                          Editando registro persistido de <strong>Administrador Geral</strong> (salvo
+                          em <code>admin_general.json</code>).
+                        </span>
+                      ) : (
+                        <span>
+                          Cadastro mestre de <strong>Administrador Geral (Pessoal)</strong> com autoridade
+                          root e persistência resiliente.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      color: '#22c55e',
+                      background: 'rgba(34, 197, 94, 0.1)',
+                      border: '1px solid #22c55e',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    COFRE LOCAL ATIVO
                   </div>
                 </div>
 
@@ -997,7 +1105,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="text"
                       value={regFullName}
                       onChange={(e) => setRegFullName(e.target.value)}
-                      placeholder="Ex: Geoni Clementino Cesar de Matos"
+                      placeholder="Nome do Administrador Geral"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1033,7 +1141,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="text"
                       value={regDocument}
                       onChange={(e) => setRegDocument(e.target.value)}
-                      placeholder="CPF ou ID Institucional"
+                      placeholder="CPF ou Matrícula Pessoal"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1078,7 +1186,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="email"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="operador@engecema.com"
+                      placeholder="email@dominio.com"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1114,7 +1222,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="text"
                       value={regUsername}
                       onChange={(e) => setRegUsername(e.target.value)}
-                      placeholder="admin_geral"
+                      placeholder="ex: operador_mestre"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1152,7 +1260,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         textTransform: 'uppercase',
                       }}
                     >
-                      Senha Mestra (Mín. 6 chars) *
+                      {isEditingExisting ? 'Nova Senha Mestra (Deixe em branco para manter)' : 'Senha Mestra (Mín. 6 caracteres) *'}
                     </label>
                     <div style={{ position: 'relative' }}>
                       <input
@@ -1160,7 +1268,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         type={showRegPassword ? 'text' : 'password'}
                         value={regPassword}
                         onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="••••••••"
+                        placeholder={isEditingExisting ? 'Manter senha atual' : '••••••••'}
                         autoComplete="off"
                         spellCheck={false}
                         style={{
@@ -1207,7 +1315,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         textTransform: 'uppercase',
                       }}
                     >
-                      Confirmar Senha *
+                      Confirmar Senha
                     </label>
                     <div style={{ position: 'relative' }}>
                       <input
@@ -1278,7 +1386,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   <UserPlus size={16} />
                   <span>
                     {isProcessing
-                      ? 'Registrando no Protocolo...'
+                      ? 'Persistindo no Arquivo do App...'
+                      : isEditingExisting
+                      ? 'Salvar Alterações e Inicializar Painel'
                       : 'Cadastrar Administrador Geral e Inicializar Painel'}
                   </span>
                 </button>
