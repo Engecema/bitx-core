@@ -747,7 +747,6 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     <input
                       type="email"
                       id="login-email"
-                      placeholder="Digite seu usuário ou e-mail"
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
                       autoComplete="off"
@@ -772,9 +771,6 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       style={{ position: 'absolute', left: '12px', top: '13px' }}
                     />
                   </div>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Campo 100% editável e limpo para digitação manual do operador.
-                  </div>
                 </div>
 
                 <div style={{ marginBottom: '20px' }}>
@@ -796,7 +792,6 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     <input
                       type={showLoginPassword ? 'text' : 'password'}
                       id="login-password"
-                      placeholder="Digite sua senha"
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       autoComplete="off"

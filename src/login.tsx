@@ -471,7 +471,6 @@ export const LoginPage: React.FC = () => {
                   type="text"
                   value={loginUser}
                   onChange={(e) => setLoginUser(e.target.value)}
-                  placeholder="Ex: admin@bitxcore.org ou operador"
                   autoComplete="off"
                   required
                   style={{
@@ -506,7 +505,6 @@ export const LoginPage: React.FC = () => {
                   type={showLoginPass ? 'text' : 'password'}
                   value={loginPass}
                   onChange={(e) => setLoginPass(e.target.value)}
-                  placeholder="Digite sua senha cadastrada"
                   autoComplete="new-password"
                   required
                   style={{
@@ -676,7 +674,6 @@ export const LoginPage: React.FC = () => {
                     type="text"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="Ex: Administrador Geral BitX Core"
                     autoComplete="off"
                     required
                     style={{
@@ -702,7 +699,6 @@ export const LoginPage: React.FC = () => {
                       type="text"
                       value={regDoc}
                       onChange={(e) => setRegDoc(e.target.value)}
-                      placeholder="000.000.000-00"
                       autoComplete="off"
                       style={{
                         width: '100%',
@@ -726,7 +722,6 @@ export const LoginPage: React.FC = () => {
                       type="email"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="admin@bitxcore.org"
                       autoComplete="off"
                       required
                       style={{
@@ -757,7 +752,6 @@ export const LoginPage: React.FC = () => {
                     type="text"
                     value={regUsername}
                     onChange={(e) => setRegUsername(e.target.value)}
-                    placeholder="Ex: admin ou operador_mestre"
                     autoComplete="off"
                     required
                     style={{
@@ -784,7 +778,6 @@ export const LoginPage: React.FC = () => {
                         type={showRegPass ? 'text' : 'password'}
                         value={regPass}
                         onChange={(e) => setRegPass(e.target.value)}
-                        placeholder="••••••••"
                         autoComplete="new-password"
                         required
                         style={{
@@ -827,7 +820,6 @@ export const LoginPage: React.FC = () => {
                         type={showRegConfirm ? 'text' : 'password'}
                         value={regPassConfirm}
                         onChange={(e) => setRegPassConfirm(e.target.value)}
-                        placeholder="••••••••"
                         autoComplete="new-password"
                         required
                         style={{
