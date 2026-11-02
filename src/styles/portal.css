@@ -148,13 +148,13 @@
 
 .portal-nav-tab:hover {
   color: #f8fafc;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .portal-nav-tab.is-active {
   color: #f97316;
   border-bottom-color: #f97316;
-  background: transparent;
+  background: rgba(249, 115, 22, 0.04);
 }
 
 .portal-ext-link {

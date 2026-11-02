@@ -4969,11 +4969,11 @@ daemon=1
                     className="portal-btn portal-btn-secondary"
                     style={{ fontSize: '12px', padding: '6px 12px', borderColor: '#334155', color: '#94a3b8' }}
                     onClick={() => {
-                      updateOperatorsAndPersist(DEFAULT_REAL_OPERATORS, '🧹 Lista de operadores restaurada com sucesso: apenas geonimatos31@gmail.com!');
+                      updateOperatorsAndPersist(DEFAULT_REAL_OPERATORS, '🧹 Lista de operadores restaurada com sucesso!');
                       notifyCloudOperators(DEFAULT_REAL_OPERATORS);
-                      addLog('[Acessos] Lista purificada mantendo apenas operador oficial geonimatos31@gmail.com.', 'success');
+                      addLog('[Acessos] Lista de operadores administrativos purificada.', 'success');
                     }}
-                    title="Restaura a lista mantendo unicamente geonimatos31@gmail.com"
+                    title="Restaura a lista de operadores administrativos padrão"
                   >
                     🔄 Purificar / Manter Somente Operador Oficial
                   </button>
