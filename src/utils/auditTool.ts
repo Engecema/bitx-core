@@ -383,7 +383,7 @@ export async function executeManualBalanceCorrection(params: {
     const clientRecord = {
       id: params.clientId,
       name: params.name || 'Geoni Clementino Cesar de Matos',
-      email: params.email || 'geonimatos31@hotmail.com',
+      email: params.email || 'operador.geral@bitxcore.org',
       document: params.document || '70781338387',
       bitx_address: params.address || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
       btxc_balance: params.btxcBalance,
@@ -398,7 +398,7 @@ export async function executeManualBalanceCorrection(params: {
 
     // Sincronizar em todas as credenciais no Supabase Cloud
     const aliases = [
-      { ...clientRecord, id: 'GX-CLI-0001', email: 'geonimatos31@hotmail.com', title_badge: 'Cliente Real' },
+      { ...clientRecord, id: 'GX-CLI-0001', email: 'operador.geral@bitxcore.org', title_badge: 'Cliente Real' },
       { ...clientRecord, id: 'GX-CLI-0001-C', email: 'geoniclementino31@gmail.com', title_badge: 'Cliente Real (Titular)' },
       { ...clientRecord, id: 'GX-CLI-0001-G', email: 'geonimatos31@gmail.com', title_badge: 'Cliente Real (Google Auth)' },
       { ...clientRecord, id: 'GX-CLI-0001-N', email: 'geonimatos31.nautilus@gmail.com', title_badge: 'Cliente Real (Nautilus)' },

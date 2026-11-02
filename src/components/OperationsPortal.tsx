@@ -611,7 +611,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
       id: 'GX-CLI-0001',
       name: 'Geoni Clementino Cesar de Matos',
       titleBadge: 'Cliente Real',
-      email: 'geonimatos31@hotmail.com',
+      email: 'operador.geral@bitxcore.org',
       document: '70781338387',
       bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
       secondaryAddresses: [
@@ -776,7 +776,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
         event: 'balance_update',
         payload: {
           clientId: 'GX-CLI-0001',
-          email: 'geonimatos31@hotmail.com',
+          email: 'operador.geral@bitxcore.org',
           secondaryEmail: 'geonimatos31@gmail.com',
           btxc_balance: masterGx,
           gx_balance: masterGx,
@@ -1278,8 +1278,8 @@ ON CONFLICT (id) DO UPDATE SET
       }
 
       // Se a conta titular não foi excluída, assegurar presença incondicional na memória ativa
-      if (!isClientMarkedDeleted('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387')) {
-        const hasMaster = combined.some((x) => x.id === 'GX-CLI-0001' || x.email === 'geonimatos31@hotmail.com');
+      if (!isClientMarkedDeleted('GX-CLI-0001', 'operador.geral@bitxcore.org', '70781338387')) {
+        const hasMaster = combined.some((x) => x.id === 'GX-CLI-0001' || x.email === 'operador.geral@bitxcore.org');
         if (!hasMaster && DEFAULT_REAL_CLIENTS.length > 0) {
           combined.unshift(DEFAULT_REAL_CLIENTS[0]);
         }
@@ -1899,8 +1899,8 @@ ON CONFLICT (id) DO UPDATE SET
 
   // Restaurar da memória do AI Studio o Titular Mestre (Geoni Clementino Cesar de Matos - GX-CLI-0001)
   const handleRestoreMasterClient = () => {
-    clearStoredDeletedClientId('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387');
-    clearStoredDeletedClientRecord('GX-CLI-0001', 'geonimatos31@hotmail.com', '70781338387');
+    clearStoredDeletedClientId('GX-CLI-0001', 'operador.geral@bitxcore.org', '70781338387');
+    clearStoredDeletedClientRecord('GX-CLI-0001', 'operador.geral@bitxcore.org', '70781338387');
     const master = { ...DEFAULT_REAL_CLIENTS[0] };
     const exists = exchangeClients.some((c) => c.id === master.id || c.email === master.email);
     const updated = exists
@@ -2232,7 +2232,7 @@ ON CONFLICT (id) DO UPDATE SET
       // Sincronizar expressamente a carteira de clientes com titular oficial
       const clients = exchangeClients.length > 0 ? exchangeClients : getStoredRealClients();
       const updatedClients = clients.map((c) => {
-        if (c.id === 'GX-CLI-0001' || c.email?.toLowerCase() === 'geonimatos31@hotmail.com') {
+        if (c.id === 'GX-CLI-0001' || c.email?.toLowerCase() === 'operador.geral@bitxcore.org') {
           return {
             ...c,
             btxcBalance: 16.75,
@@ -2368,7 +2368,7 @@ ON CONFLICT (id) DO UPDATE SET
           updated_at: new Date().toISOString(),
         };
         await supabase.from('clients').upsert([
-          { ...commonClient, id: 'GX-CLI-0001', email: 'geonimatos31@hotmail.com', title_badge: 'Cliente Real' },
+          { ...commonClient, id: 'GX-CLI-0001', email: 'operador.geral@bitxcore.org', title_badge: 'Cliente Real' },
           { ...commonClient, id: 'GX-CLI-0001-C', email: 'geoniclementino31@gmail.com', title_badge: 'Cliente Real (Titular)' },
           { ...commonClient, id: 'GX-CLI-0001-G', email: 'geonimatos31@gmail.com', title_badge: 'Cliente Real (Google Auth)' },
           { ...commonClient, id: 'GX-CLI-0001-N', email: 'geonimatos31.nautilus@gmail.com', title_badge: 'Cliente Real (Nautilus)' },
@@ -2911,7 +2911,7 @@ ON CONFLICT (id) DO UPDATE SET
       dest === 'btxc1qf08xve992k7s9k8j3z2p987e9k3l98764a'.toLowerCase()
     ) {
       const master = exchangeClients.find(
-        (c) => c.id === 'GX-CLI-0001' || c.email?.toLowerCase() === 'geonimatos31@hotmail.com'
+        (c) => c.id === 'GX-CLI-0001' || c.email?.toLowerCase() === 'operador.geral@bitxcore.org'
       );
       if (master) return master;
     }
@@ -7894,7 +7894,7 @@ daemon=1
                         <span style={{ color: '#94a3b8', display: 'block' }}>Cliente Destinatário:</span>
                         <strong style={{ color: '#f8fafc' }}>Geoni Clementino Cesar de Matos</strong>
                         <span style={{ color: '#f97316', fontFamily: 'monospace', display: 'block' }}>ID: GX-CLI-0001 &bull; CPF: 70781338387</span>
-                        <span style={{ color: '#38bdf8', fontSize: '11px', display: 'block' }}>E-mails: geonimatos31@hotmail.com / geonimatos31@gmail.com</span>
+                        <span style={{ color: '#38bdf8', fontSize: '11px', display: 'block' }}>E-mails: operador.geral@bitxcore.org / geonimatos31@gmail.com</span>
                       </div>
                       <div>
                         <span style={{ color: '#94a3b8', display: 'block' }}>Endereço na Global Exchange:</span>

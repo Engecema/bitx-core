@@ -736,7 +736,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               <form onSubmit={handleLoginSubmit} autoComplete="off">
                 <div style={{ marginBottom: '16px' }}>
                   <label
-                    htmlFor="bitx-login-user"
+                    htmlFor="login-email"
                     style={{
                       display: 'block',
                       fontSize: '12px',
@@ -751,11 +751,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
-                      id="bitx-login-user"
-                      type="text"
+                      type="email"
+                      id="login-email"
+                      placeholder="Digite seu usuário ou e-mail"
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
-                      placeholder="Digite o e-mail ou usuário cadastrado"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -784,7 +784,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                 <div style={{ marginBottom: '20px' }}>
                   <label
-                    htmlFor="bitx-login-pass"
+                    htmlFor="login-password"
                     style={{
                       display: 'block',
                       fontSize: '12px',
@@ -799,11 +799,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
-                      id="bitx-login-pass"
                       type={showLoginPassword ? 'text' : 'password'}
+                      id="login-password"
+                      placeholder="Digite sua senha"
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="Digite sua senha cadastrada"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -998,7 +998,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <div>
                     <label
-                      htmlFor="bitx-reg-name"
+                      htmlFor="reg-fullname"
                       style={{
                         display: 'block',
                         fontSize: '11px',
@@ -1011,11 +1011,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       Nome Completo (Pessoal) *
                     </label>
                     <input
-                      id="bitx-reg-name"
                       type="text"
+                      id="reg-fullname"
+                      placeholder="Digite o nome completo do operador"
                       value={regFullName}
                       onChange={(e) => setRegFullName(e.target.value)}
-                      placeholder="Digite o nome completo do operador"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1034,7 +1034,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                   <div>
                     <label
-                      htmlFor="bitx-reg-doc"
+                      htmlFor="reg-doc"
                       style={{
                         display: 'block',
                         fontSize: '11px',
@@ -1047,11 +1047,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       Documento / CPF / Matrícula
                     </label>
                     <input
-                      id="bitx-reg-doc"
                       type="text"
+                      id="reg-doc"
+                      placeholder="Digite o documento ou CPF"
                       value={regDocument}
                       onChange={(e) => setRegDocument(e.target.value)}
-                      placeholder="Digite o documento ou CPF"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1079,7 +1079,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <div>
                     <label
-                      htmlFor="bitx-reg-email"
+                      htmlFor="reg-email"
                       style={{
                         display: 'block',
                         fontSize: '11px',
@@ -1092,11 +1092,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       E-mail Institucional / Pessoal *
                     </label>
                     <input
-                      id="bitx-reg-email"
                       type="email"
+                      id="reg-email"
+                      placeholder="Digite seu e-mail institucional ou pessoal"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="Digite seu e-mail institucional ou pessoal"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1115,7 +1115,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                   <div>
                     <label
-                      htmlFor="bitx-reg-username"
+                      htmlFor="reg-username"
                       style={{
                         display: 'block',
                         fontSize: '11px',
@@ -1128,11 +1128,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       Usuário de Acesso Operacional *
                     </label>
                     <input
-                      id="bitx-reg-username"
                       type="text"
+                      id="reg-username"
+                      placeholder="Digite seu usuário de acesso operacional"
                       value={regUsername}
                       onChange={(e) => setRegUsername(e.target.value)}
-                      placeholder="Digite o usuário de acesso desejado"
                       autoComplete="off"
                       spellCheck={false}
                       style={{
@@ -1160,7 +1160,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <div>
                     <label
-                      htmlFor="bitx-reg-password"
+                      htmlFor="reg-password"
                       style={{
                         display: 'block',
                         fontSize: '11px',
@@ -1174,11 +1174,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     </label>
                     <div style={{ position: 'relative' }}>
                       <input
-                        id="bitx-reg-password"
                         type={showRegPassword ? 'text' : 'password'}
+                        id="reg-password"
+                        placeholder="Digite a senha mestra"
                         value={regPassword}
                         onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="Digite a senha mestra"
                         autoComplete="off"
                         spellCheck={false}
                         style={{
@@ -1215,7 +1215,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                   <div>
                     <label
-                      htmlFor="bitx-reg-confirm"
+                      htmlFor="reg-password-confirm"
                       style={{
                         display: 'block',
                         fontSize: '11px',
@@ -1229,11 +1229,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     </label>
                     <div style={{ position: 'relative' }}>
                       <input
-                        id="bitx-reg-confirm"
                         type={showRegConfirm ? 'text' : 'password'}
+                        id="reg-password-confirm"
+                        placeholder="Confirme a senha mestra"
                         value={regPasswordConfirm}
                         onChange={(e) => setRegPasswordConfirm(e.target.value)}
-                        placeholder="Confirme a senha mestra"
                         autoComplete="off"
                         spellCheck={false}
                         style={{
