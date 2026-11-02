@@ -6,7 +6,7 @@ import { ClientWallet } from './components/ClientWallet';
 import { PoliciesView } from './components/PoliciesView';
 import { SecurityLockOverlay } from './components/SecurityLockOverlay';
 import { securityGuard, SecurityStatus } from './utils/securityGuard';
-import { Lock, ShieldCheck } from 'lucide-react';
+import { Lock, ShieldCheck, LogOut } from 'lucide-react';
 
 type AppView = 'portal' | 'site' | 'panel' | 'wallet';
 
@@ -105,7 +105,7 @@ export function App() {
           <span>Zero-Persistence Mode</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
             onClick={handleManualLock}
@@ -126,6 +126,34 @@ export function App() {
           >
             <Lock size={12} />
             <span>Bloquear Painel (Purge)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                sessionStorage.clear();
+                localStorage.clear();
+              } catch (_) {}
+              window.location.replace('login.html');
+            }}
+            title="Encerrar sessão de administrador, limpar armazenamento e redirecionar para login.html"
+            style={{
+              background: '#7f1d1d',
+              color: '#fecaca',
+              border: '1px solid #dc2626',
+              borderRadius: '4px',
+              padding: '3px 10px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <LogOut size={12} />
+            <span>Sair</span>
           </button>
         </div>
       </div>

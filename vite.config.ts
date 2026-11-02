@@ -1,3 +1,4 @@
+import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -35,6 +36,14 @@ export default defineConfig({
       '@scure/bip39/wordlists/english',
       '@supabase/supabase-js',
     ],
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        login: resolve(__dirname, 'login.html'),
+      },
+    },
   },
   server: {
     host: '0.0.0.0',

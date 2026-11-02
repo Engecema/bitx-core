@@ -2,6 +2,55 @@ import React, { useState, useEffect } from 'react';
 import '../styles/admin.css';
 import { persistentVault } from '../utils/persistentVault';
 
+// ============================================================================
+// BITX CORE — ROUTE GUARD & VALIDAÇÃO RÍGIDA DE SESSÃO DO ADMINISTRADOR
+// ============================================================================
+// Execução obrigatória imediatamente no topo do arquivo e no evento DOMContentLoaded
+// antes de renderizar qualquer elemento visual na tela para impedir o acesso direto via URL.
+if (typeof window !== 'undefined') {
+  const enforceAdminRouteGuard = () => {
+    try {
+      const isAuth =
+        sessionStorage.getItem('bitx_admin_session') === 'active' ||
+        sessionStorage.getItem('bitx_admin_auth') === 'true';
+
+      if (!isAuth) {
+        try {
+          sessionStorage.clear();
+          localStorage.clear();
+        } catch (_) {}
+
+        if (!window.location.pathname.endsWith('login.html')) {
+          window.location.replace('login.html');
+        }
+      }
+    } catch (_) {
+      try {
+        sessionStorage.clear();
+        localStorage.clear();
+      } catch (_) {}
+      if (!window.location.pathname.endsWith('login.html')) {
+        window.location.replace('login.html');
+      }
+    }
+  };
+
+  // 1. Verificação imediata no topo do arquivo
+  enforceAdminRouteGuard();
+
+  // 2. Verificação no evento DOMContentLoaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', enforceAdminRouteGuard);
+  }
+
+  // 3. Proteção contra restauração de BFCache (Voltar / Avançar / Recarregar)
+  window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+    if (event.persisted) {
+      enforceAdminRouteGuard();
+    }
+  });
+}
+
 interface AdminPanelProps {
   onNavigateToSite: () => void;
   onNavigateToWallet: () => void;
@@ -20,7 +69,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onOpenPolicy,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('bitx_admin_session') === 'active';
+    if (typeof window === 'undefined') return false;
+    return (
+      sessionStorage.getItem('bitx_admin_session') === 'active' ||
+      sessionStorage.getItem('bitx_admin_auth') === 'true'
+    );
   });
 
   const [username, setUsername] = useState('');
@@ -64,6 +117,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showNewPass, setShowNewPass] = useState(false);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     let bc: BroadcastChannel | null = null;
     try {
       bc = new BroadcastChannel('global_exchange_cross_tab_sync');
@@ -95,7 +150,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       window.removeEventListener('storage', handleStorage);
       if (bc) bc.close();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +167,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (vaultRes.valid) {
       setErrorMessage('');
       sessionStorage.setItem('bitx_admin_session', 'active');
+      sessionStorage.setItem('bitx_admin_auth', 'true');
       sessionStorage.setItem('bitx_admin_user', u);
       setIsAuthenticated(true);
       return;
@@ -121,6 +177,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (users[u] && users[u] === p) {
       setErrorMessage('');
       sessionStorage.setItem('bitx_admin_session', 'active');
+      sessionStorage.setItem('bitx_admin_auth', 'true');
       sessionStorage.setItem('bitx_admin_user', u);
       setIsAuthenticated(true);
       return;
@@ -130,9 +187,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('bitx_admin_session');
-    sessionStorage.removeItem('bitx_admin_user');
+    try {
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch (err) {
+      console.warn('[BitX Admin] Erro ao limpar armazenamento no logout:', err);
+    }
     setIsAuthenticated(false);
+    window.location.replace('login.html');
   };
 
   const handleSendTransfer = (e: React.FormEvent) => {
@@ -381,17 +443,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <h1 style={{ border: 'none', margin: 0, padding: 0 }}>Painel de Controle</h1>
                 <button
+                  type="button"
                   onClick={handleLogout}
+                  title="Encerrar sessão de administrador, limpar armazenamento e redirecionar para login.html"
                   style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#ef4444',
+                    background: '#991b1b',
+                    border: '1px solid #ef4444',
+                    color: '#fee2e2',
+                    padding: '4px 14px',
+                    borderRadius: '4px',
                     cursor: 'pointer',
                     fontSize: '12px',
-                    fontWeight: 'bold',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
                 >
-                  Desconectar
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
+                  Sair
                 </button>
               </div>
 

@@ -3,6 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Cabeçalhos HTTP / Meta de Proteção Anti-Cache e BFCache -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>BitX Core (BTXC) — Rede Principal & Global Exchange</title>
     <meta name="description" content="Rede Principal de Produção BitX Core (BTXC), mineração PoW, carteira de autocustódia BIP-84 e integração com a corretora Global Exchange." />
     <meta property="og:title" content="BitX Core (BTXC) — Rede Principal & Global Exchange" />
@@ -11,6 +15,41 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      // ROUTE GUARD & VALIDAÇÃO RÍGIDA DE SESSÃO DO ADMINISTRADOR
+      // Impede o acesso direto via URL e purga dados caso não autenticado
+      (function() {
+        function enforceAdminGuard() {
+          try {
+            var isAuth = sessionStorage.getItem('bitx_admin_session') === 'active' ||
+                         sessionStorage.getItem('bitx_admin_auth') === 'true';
+            if (!isAuth) {
+              try { sessionStorage.clear(); } catch (_) {}
+              try { localStorage.clear(); } catch (_) {}
+              if (!window.location.pathname.endsWith('login.html')) {
+                window.location.replace("login.html");
+              }
+            }
+          } catch (_) {
+            try { sessionStorage.clear(); } catch (_) {}
+            try { localStorage.clear(); } catch (_) {}
+            window.location.replace("login.html");
+          }
+        }
+        // Verificação imediata síncrona
+        enforceAdminGuard();
+        // Verificação obrigatória no evento DOMContentLoaded
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', enforceAdminGuard);
+        }
+        // Proteção contra restauração de BFCache (Voltar / Avançar / Recarregar)
+        window.addEventListener('pageshow', function(event) {
+          if (event.persisted) {
+            enforceAdminGuard();
+          }
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Cabeçalhos HTTP / Meta de Proteção Anti-Cache e BFCache -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>BitX Core (BTXC) — Autenticação de Administrador</title>
+    <meta name="description" content="Portal de autenticação e credenciamento de Administrador Geral da Rede BitX Core (BTXC)." />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        // Se já estiver com sessão válida ativa, redireciona ao painel
+        try {
+          var isAuth = sessionStorage.getItem('bitx_admin_session') === 'active' ||
+                       sessionStorage.getItem('bitx_admin_auth') === 'true';
+          if (isAuth) {
+            window.location.replace("index.html");
+          }
+        } catch (_) {}
+
+        window.addEventListener('pageshow', function(event) {
+          if (event.persisted) {
+            try {
+              var active = sessionStorage.getItem('bitx_admin_session') === 'active' ||
+                           sessionStorage.getItem('bitx_admin_auth') === 'true';
+              if (active) {
+                window.location.replace("index.html");
+              }
+            } catch (_) {}
+          }
+        });
+      })();
+    </script>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #070b10;">
+    <div id="login-root"></div>
+    <script type="module" src="/src/login.tsx"></script>
+  </body>
+</html>
