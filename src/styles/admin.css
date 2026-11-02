@@ -249,3 +249,94 @@
   color: #7dd3fc;
   text-decoration: underline;
 }
+
+/* ==========================================================================
+   Painel de Login & Cadastro — Abas e Panos de Fundo Limpos (Zero Background)
+   ========================================================================== */
+.auth-nav-tabs {
+  display: flex;
+  gap: 12px;
+  padding: 8px 24px 0 24px;
+  border-bottom: 1px solid #1e293b;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.auth-nav-tab {
+  flex: 1;
+  color: #94a3b8;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-nav-tab:hover {
+  color: #f8fafc;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.auth-nav-tab.is-active {
+  color: #f97316;
+  border-bottom: 2px solid #f97316 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.auth-sub-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 8px;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.auth-sub-tab {
+  color: #94a3b8;
+  border: 1px solid transparent !important;
+  border-radius: 6px;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-sub-tab:hover {
+  color: #f8fafc;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.auth-sub-tab.is-active {
+  color: #f97316;
+  border-color: #334155 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+

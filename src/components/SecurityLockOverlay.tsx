@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { securityGuard, SecurityStatus } from '../utils/securityGuard';
 import { persistentVault, GeneralAdminRecord } from '../utils/persistentVault';
+import '../styles/admin.css';
 
 interface SecurityLockOverlayProps {
   status: SecurityStatus;
@@ -73,16 +74,13 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Garantir carregamento assíncrono do cofre desktop na montagem
+  // Carregamento assíncrono do cofre desktop na montagem
   useEffect(() => {
     let isMounted = true;
     persistentVault.ready().then(() => {
       if (isMounted) {
         const meta = persistentVault.getVaultMetadata();
         setVaultMetadata(meta);
-        if (meta.adminCount === 0) {
-          setActiveTab('register_admin');
-        }
       }
     });
     return () => {
@@ -210,16 +208,24 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
     const passConfirm = regPasswordConfirm.trim();
 
     if (!name || !email || !user || !pass) {
-      setAuthError('Preencha os campos obrigatórios para o cadastro de Administrador Geral.');
+      if (!name || !email) {
+        setAdminSubTab('personal');
+        setAuthError('Preencha os campos obrigatórios (Nome e E-mail) nos Dados Pessoais.');
+      } else {
+        setAdminSubTab('credentials');
+        setAuthError('Preencha o Usuário e Senha Mestra nas Credenciais de Acesso.');
+      }
       return;
     }
 
     if (pass.length < 6) {
+      setAdminSubTab('credentials');
       setAuthError('A senha do Administrador Geral deve conter no mínimo 6 caracteres.');
       return;
     }
 
     if (pass !== passConfirm) {
+      setAdminSubTab('credentials');
       setAuthError('A confirmação de senha não coincide com a senha mestra informada.');
       return;
     }
@@ -599,66 +605,60 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setScreen('locked_summary')}
-              title="Ver detalhes de segurança"
-              style={{
-                backgroundColor: '#111111',
-                backgroundImage: 'none',
-                border: '1px solid #333333',
-                color: '#94a3b8',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '11px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <ArrowLeft size={13} />
-              <span>Status Purga</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => finalizeUnlock('Operador Geral', 'operador', 'Super Admin')}
+                title="Acessar o Painel da Rede BitX Core diretamente"
+                style={{
+                  backgroundColor: '#f97316',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 14px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>Acessar Painel &rarr;</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScreen('locked_summary')}
+                title="Ver detalhes de segurança"
+                style={{
+                  backgroundColor: 'transparent',
+                  backgroundImage: 'none',
+                  border: '1px solid #334155',
+                  color: '#94a3b8',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <ArrowLeft size={13} />
+                <span>Status Purga</span>
+              </button>
+            </div>
           </div>
 
-          {/* Abas Superiores Dinâmicas (#111111 e #222222 sem pano de fundo) */}
-          <div
-            style={{
-              backgroundColor: '#111111',
-              backgroundImage: 'none',
-              borderBottom: '1px solid #222222',
-              padding: '8px 24px 0 24px',
-              display: 'flex',
-              gap: '10px',
-            }}
-          >
+          {/* Abas Superiores Dinâmicas — Limpas e sem pano de fundo */}
+          <div className="auth-nav-tabs">
             <button
               type="button"
+              className={`auth-nav-tab ${activeTab === 'login' ? 'is-active' : ''}`}
               onClick={() => {
                 setActiveTab('login');
                 setAuthError(null);
                 setAuthSuccess(null);
-              }}
-              style={{
-                flex: 1,
-                backgroundColor: activeTab === 'login' ? '#222222' : 'transparent',
-                backgroundImage: 'none',
-                color: activeTab === 'login' ? '#f97316' : '#94a3b8',
-                border: '1px solid',
-                borderColor:
-                  activeTab === 'login' ? '#333333 #333333 #222222 #333333' : 'transparent',
-                borderBottom: activeTab === 'login' ? '2px solid #f97316' : '1px solid transparent',
-                borderRadius: '8px 8px 0 0',
-                padding: '12px 16px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'all 0.15s ease',
               }}
             >
               <User size={16} />
@@ -667,33 +667,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
             <button
               type="button"
+              className={`auth-nav-tab ${activeTab === 'register_admin' ? 'is-active' : ''}`}
               onClick={() => {
                 setActiveTab('register_admin');
                 setAuthError(null);
                 setAuthSuccess(null);
-              }}
-              style={{
-                flex: 1,
-                backgroundColor: activeTab === 'register_admin' ? '#222222' : 'transparent',
-                backgroundImage: 'none',
-                color: activeTab === 'register_admin' ? '#f97316' : '#94a3b8',
-                border: '1px solid',
-                borderColor:
-                  activeTab === 'register_admin'
-                    ? '#333333 #333333 #222222 #333333'
-                    : 'transparent',
-                borderBottom:
-                  activeTab === 'register_admin' ? '2px solid #f97316' : '1px solid transparent',
-                borderRadius: '8px 8px 0 0',
-                padding: '12px 16px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'all 0.15s ease',
               }}
             >
               <UserPlus size={16} />
@@ -1013,33 +991,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 </div>
 
                 {/* Sub-Abas do Painel Cadastrar Administrador Geral (Totalmente limpas e sem pano de fundo) */}
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '8px',
-                    marginBottom: '16px',
-                    borderBottom: '1px solid #222222',
-                    paddingBottom: '8px',
-                  }}
-                >
+                <div className="auth-sub-tabs">
                   <button
                     type="button"
+                    className={`auth-sub-tab ${adminSubTab === 'all' ? 'is-active' : ''}`}
                     onClick={() => setAdminSubTab('all')}
-                    style={{
-                      backgroundColor: adminSubTab === 'all' ? '#222222' : 'transparent',
-                      backgroundImage: 'none',
-                      color: adminSubTab === 'all' ? '#f97316' : '#94a3b8',
-                      border: '1px solid',
-                      borderColor: adminSubTab === 'all' ? '#333333' : 'transparent',
-                      borderRadius: '6px',
-                      padding: '6px 12px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
                   >
                     <FileText size={13} />
                     <span>Todas as Informações</span>
@@ -1047,22 +1003,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                   <button
                     type="button"
+                    className={`auth-sub-tab ${adminSubTab === 'personal' ? 'is-active' : ''}`}
                     onClick={() => setAdminSubTab('personal')}
-                    style={{
-                      backgroundColor: adminSubTab === 'personal' ? '#222222' : 'transparent',
-                      backgroundImage: 'none',
-                      color: adminSubTab === 'personal' ? '#f97316' : '#94a3b8',
-                      border: '1px solid',
-                      borderColor: adminSubTab === 'personal' ? '#333333' : 'transparent',
-                      borderRadius: '6px',
-                      padding: '6px 12px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
                   >
                     <User size={13} />
                     <span>Dados Pessoais</span>
@@ -1070,22 +1012,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                   <button
                     type="button"
+                    className={`auth-sub-tab ${adminSubTab === 'credentials' ? 'is-active' : ''}`}
                     onClick={() => setAdminSubTab('credentials')}
-                    style={{
-                      backgroundColor: adminSubTab === 'credentials' ? '#222222' : 'transparent',
-                      backgroundImage: 'none',
-                      color: adminSubTab === 'credentials' ? '#f97316' : '#94a3b8',
-                      border: '1px solid',
-                      borderColor: adminSubTab === 'credentials' ? '#333333' : 'transparent',
-                      borderRadius: '6px',
-                      padding: '6px 12px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
                   >
                     <Key size={13} />
                     <span>Credenciais de Acesso</span>
@@ -1230,6 +1158,28 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         }}
                       />
                     </div>
+                    {adminSubTab === 'personal' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminSubTab('credentials')}
+                        style={{
+                          background: '#1e293b',
+                          color: '#f97316',
+                          border: '1px solid #334155',
+                          borderRadius: '6px',
+                          padding: '8px 14px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          marginTop: '10px',
+                        }}
+                      >
+                        <span>Avançar para Credenciais de Acesso &rarr;</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1238,15 +1188,39 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   <div style={{ marginBottom: '16px' }}>
                     <div
                       style={{
-                        fontSize: '11px',
-                        color: '#f97316',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
                         marginBottom: '10px',
                       }}
                     >
-                      2. Credenciais de Acesso & Senha Mestra
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: '#f97316',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        2. Credenciais de Acesso & Senha Mestra
+                      </div>
+                      {adminSubTab === 'credentials' && (
+                        <button
+                          type="button"
+                          onClick={() => setAdminSubTab('personal')}
+                          style={{
+                            background: 'transparent',
+                            color: '#94a3b8',
+                            border: 'none',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          &larr; Voltar para Dados Pessoais
+                        </button>
+                      )}
                     </div>
 
                     <div style={{ marginBottom: '12px' }}>

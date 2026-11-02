@@ -611,7 +611,7 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
       id: 'GX-CLI-0001',
       name: 'Geoni Clementino Cesar de Matos',
       titleBadge: 'Cliente Real',
-      email: 'operador.geral@bitxcore.org',
+      email: 'geonimatos31@hotmail.com',
       document: '70781338387',
       bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
       secondaryAddresses: [
@@ -1063,25 +1063,7 @@ ON CONFLICT (id) DO UPDATE SET
         try {
           if (isMaster) {
             // Sincronizar todos os possíveis e-mails de login do titular (Hotmail e Gmail/Google Auth)
-            const aliasClementino = {
-              ...payload,
-              id: 'GX-CLI-0001-C',
-              email: 'geoniclementino31@gmail.com',
-              title_badge: 'Cliente Real (Titular)',
-            };
-            const aliasGmail = {
-              ...payload,
-              id: 'GX-CLI-0001-G',
-              email: 'geonimatos31@gmail.com',
-              title_badge: 'Cliente Real (Google Auth)',
-            };
-            const aliasNautilus = {
-              ...payload,
-              id: 'GX-CLI-0001-N',
-              email: 'geonimatos31.nautilus@gmail.com',
-              title_badge: 'Cliente Real (Nautilus)',
-            };
-            await supabase.from('clients').upsert([payload, aliasClementino, aliasGmail, aliasNautilus], { onConflict: 'id' });
+            await supabase.from('clients').upsert([payload], { onConflict: 'id' });
           } else {
             await supabase.from('clients').upsert([payload]);
           }
@@ -2368,10 +2350,7 @@ ON CONFLICT (id) DO UPDATE SET
           updated_at: new Date().toISOString(),
         };
         await supabase.from('clients').upsert([
-          { ...commonClient, id: 'GX-CLI-0001', email: 'operador.geral@bitxcore.org', title_badge: 'Cliente Real' },
-          { ...commonClient, id: 'GX-CLI-0001-C', email: 'geoniclementino31@gmail.com', title_badge: 'Cliente Real (Titular)' },
-          { ...commonClient, id: 'GX-CLI-0001-G', email: 'geonimatos31@gmail.com', title_badge: 'Cliente Real (Google Auth)' },
-          { ...commonClient, id: 'GX-CLI-0001-N', email: 'geonimatos31.nautilus@gmail.com', title_badge: 'Cliente Real (Nautilus)' },
+          { ...commonClient, id: 'GX-CLI-0001', title_badge: 'Cliente Real' },
         ], { onConflict: 'id' });
       } catch (sbErr) {
         console.warn('[Equalize Supabase sync]:', sbErr);
@@ -3399,7 +3378,6 @@ daemon=1
             onClick={() => setActiveTab('custody')}
             style={{
               fontWeight: 800,
-              background: activeTab === 'custody' ? '#1e293b' : undefined,
               borderColor: activeTab === 'custody' ? '#10b981' : undefined,
             }}
           >
@@ -3411,7 +3389,6 @@ daemon=1
             onClick={() => setActiveTab('equalization')}
             style={{
               fontWeight: 800,
-              background: activeTab === 'equalization' ? '#1e293b' : undefined,
               borderColor: activeTab === 'equalization' ? '#f59e0b' : undefined,
               color: activeTab === 'equalization' ? '#fbbf24' : undefined,
             }}
@@ -7894,7 +7871,7 @@ daemon=1
                         <span style={{ color: '#94a3b8', display: 'block' }}>Cliente Destinatário:</span>
                         <strong style={{ color: '#f8fafc' }}>Geoni Clementino Cesar de Matos</strong>
                         <span style={{ color: '#f97316', fontFamily: 'monospace', display: 'block' }}>ID: GX-CLI-0001 &bull; CPF: 70781338387</span>
-                        <span style={{ color: '#38bdf8', fontSize: '11px', display: 'block' }}>E-mails: operador.geral@bitxcore.org / geonimatos31@gmail.com</span>
+                        <span style={{ color: '#38bdf8', fontSize: '11px', display: 'block' }}>E-mail: geonimatos31@hotmail.com</span>
                       </div>
                       <div>
                         <span style={{ color: '#94a3b8', display: 'block' }}>Endereço na Global Exchange:</span>

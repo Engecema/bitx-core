@@ -203,44 +203,18 @@ class BitXSecurityGuard {
 
     // 1. Detecção de BFCache (Back-Forward Cache): disparado quando o usuário usa voltar/avançar
     window.addEventListener('pageshow', (event: PageTransitionEvent) => {
-      if (event.persisted) {
-        console.warn('[BitXSecurity] Página restaurada do BFCache. Disparando purga imediata.');
+      if (event.persisted && !sessionStorage.getItem('bitx_admin_session')) {
+        console.warn('[BitXSecurity] Página restaurada do BFCache.');
         this.lock('Restauração de Histórico (BFCache detectado - Voltar/Avançar)');
       }
     });
 
-    // 2. Proteção contra navegação histórica (popstate)
-    window.addEventListener('popstate', () => {
-      // Se não for rota institucional pública, bloqueia o painel operacional
-      const hash = window.location.hash.toLowerCase();
-      if (!hash.includes('site') && !this.status.isLocked) {
-        this.lock('Navegação no histórico do navegador detectada');
-      }
-    });
-
-    // 3. Detecção de Recarregamento de Página (F5 ou Botão Recarregar)
-    try {
-      const navEntries = performance.getEntriesByType('navigation');
-      if (navEntries.length > 0) {
-        const nav = navEntries[0] as PerformanceNavigationTiming;
-        if (nav.type === 'reload') {
-          console.warn('[BitXSecurity] Recarregamento de página detectado. Exigindo re-inicialização.');
-          this.lock('Recarregamento de página detectado (Proteção Anti-Reload)');
-        }
-      } else if (
-        // Compatibilidade retroativa para navegadores legados
-        (performance as any)?.navigation?.type === 1
-      ) {
-        this.lock('Recarregamento de página detectado (Proteção Anti-Reload)');
-      }
-    } catch (e) {
-      console.warn('[BitXSecurity] Não foi possível inspecionar PerformanceNavigationTiming:', e);
-    }
-
-    // 4. Proteção contra descarte de aba / suspensão de página
+    // 2. Proteção contra descarte de aba / suspensão de página
     window.addEventListener('pagehide', () => {
-      // Purga antes que a aba seja descartada ou mantida em cache
-      this.purgeSensitiveStorage();
+      // Se não houver sessão ativa, purga antes que a aba seja descartada
+      if (!sessionStorage.getItem('bitx_admin_session')) {
+        this.purgeSensitiveStorage();
+      }
     });
   }
 
