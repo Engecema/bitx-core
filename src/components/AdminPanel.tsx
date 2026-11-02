@@ -301,8 +301,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <input
                     type="text"
                     id="username"
+                    placeholder="Digite seu usuário ou e-mail"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="off"
+                    style={{ backgroundImage: 'none' }}
                     required
                   />
                 </div>
@@ -312,8 +315,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <input
                       type={showPassword ? 'text' : 'password'}
                       id="password"
+                      placeholder="Digite sua senha"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="off"
+                      style={{ backgroundImage: 'none' }}
                       required
                     />
                     <button

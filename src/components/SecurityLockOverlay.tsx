@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Fingerprint,
   HardDrive,
+  FileText,
+  Key,
 } from 'lucide-react';
 import { securityGuard, SecurityStatus } from '../utils/securityGuard';
 import { persistentVault, GeneralAdminRecord } from '../utils/persistentVault';
@@ -26,15 +28,17 @@ interface SecurityLockOverlayProps {
 
 type OverlayScreen = 'locked_summary' | 'auth_tree';
 type AuthTab = 'login' | 'register_admin';
+type AdminSubTab = 'all' | 'personal' | 'credentials';
 
 export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   status,
   onReinitialize,
 }) => {
-  // Controle de tela e montagem limpa da árvore de componentes
-  const [screen, setScreen] = useState<OverlayScreen>('locked_summary');
+  // Controle de tela: inicia diretamente na árvore de autenticação/cadastro sem pano de fundo
+  const [screen, setScreen] = useState<OverlayScreen>('auth_tree');
   const [treeInstanceKey, setTreeInstanceKey] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
+  const [adminSubTab, setAdminSubTab] = useState<AdminSubTab>('all');
 
   // Metadados do cofre desktop
   const [vaultMetadata, setVaultMetadata] = useState<{
@@ -49,12 +53,12 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   const [providerMode, setProviderMode] = useState<'mainnet' | 'local_rpc'>('mainnet');
   const [customRpcUrl, setCustomRpcUrl] = useState('');
 
-  // Estado da aba 'Acessar Painel' (Login/Senha) — Totalmente limpos por padrão (value="")
+  // Estado da aba 'Acessar Painel' (Login/Senha) — Totalmente limpos e editáveis (value="")
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  // Estado da aba 'Cadastrar Administrador Geral' (Pessoal) — Totalmente limpos por padrão (value="")
+  // Estado da aba 'Cadastrar Administrador Geral' (Pessoal) — Totalmente limpos e editáveis (value="")
   const [regFullName, setRegFullName] = useState('');
   const [regDocument, setRegDocument] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -255,34 +259,36 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
         inset: 0,
         zIndex: 999999,
         backgroundColor: '#111111',
-        backgroundImage: 'radial-gradient(circle at 50% 20%, #222222 0%, #111111 80%)',
+        backgroundImage: 'none', // Sem pano de fundo
         color: '#f1f5f9',
         fontFamily: "'DM Mono', monospace, -apple-system, sans-serif",
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px',
+        padding: '20px',
         overflowY: 'auto',
       }}
     >
-      {/* TELA 1: Resumo do Bloqueio e Gatilho de Re-inicialização */}
+      {/* TELA 1: Resumo do Bloqueio de Segurança (Opcional, acessível via botão) */}
       {screen === 'locked_summary' && (
         <div
           style={{
             width: '100%',
             maxWidth: '680px',
-            background: '#111111',
+            backgroundColor: '#111111',
+            backgroundImage: 'none',
             border: '1px solid #222222',
-            borderRadius: '12px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.95), 0 0 40px rgba(239, 68, 68, 0.15)',
+            borderRadius: '10px',
+            boxShadow: 'none',
             overflow: 'hidden',
           }}
         >
-          {/* Top Security Banner */}
+          {/* Top Security Banner - Fundo plano sem gradientes */}
           <div
             style={{
-              background: 'linear-gradient(90deg, #7f1d1d 0%, #450a0a 100%)',
-              borderBottom: '1px solid #991b1b',
+              backgroundColor: '#222222',
+              backgroundImage: 'none',
+              borderBottom: '1px solid #333333',
               padding: '16px 24px',
               display: 'flex',
               alignItems: 'center',
@@ -294,7 +300,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 width: '36px',
                 height: '36px',
                 borderRadius: '8px',
-                background: '#ef4444',
+                backgroundColor: '#ef4444',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -320,7 +326,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 style={{
                   margin: 0,
                   fontSize: '12px',
-                  color: '#fca5a5',
+                  color: '#94a3b8',
                 }}
               >
                 Mecanismo de Defesa Ativo • Isolamento de Memória & Anti-Forensics
@@ -329,12 +335,13 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
           </div>
 
           {/* Content Body */}
-          <div style={{ padding: '24px 28px', background: '#111111' }}>
+          <div style={{ padding: '24px 28px', backgroundColor: '#111111', backgroundImage: 'none' }}>
             {/* Reason Alert */}
             <div
               style={{
-                background: '#222222',
-                border: '1px solid #3f1a24',
+                backgroundColor: '#222222',
+                backgroundImage: 'none',
+                border: '1px solid #333333',
                 borderRadius: '8px',
                 padding: '14px 18px',
                 display: 'flex',
@@ -369,8 +376,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             {/* Status do Arquivo de Persistência Desktop */}
             <div
               style={{
-                background: '#161d27',
-                border: '1px solid #233448',
+                backgroundColor: '#181818',
+                backgroundImage: 'none',
+                border: '1px solid #282828',
                 borderRadius: '8px',
                 padding: '12px 16px',
                 marginBottom: '20px',
@@ -416,8 +424,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               </div>
               <div
                 style={{
-                  background: '#222222',
-                  border: '1px solid #2a2a2a',
+                  backgroundColor: '#222222',
+                  backgroundImage: 'none',
+                  border: '1px solid #333333',
                   borderRadius: '8px',
                   padding: '14px 18px',
                   display: 'flex',
@@ -473,16 +482,15 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               </div>
             </div>
 
-            {/* Botão Principal de Ação que dispara a montagem da árvore de autenticação do zero */}
+            {/* Botão de Re-inicialização sem gradiente de fundo */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 type="button"
                 onClick={handleStartReinitialization}
                 style={{
                   width: '100%',
-                  background: isProcessing
-                    ? '#334155'
-                    : 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  backgroundColor: isProcessing ? '#333333' : '#f97316',
+                  backgroundImage: 'none',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
@@ -495,8 +503,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '10px',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 14px rgba(234, 88, 12, 0.4)',
+                  transition: 'background 0.2s ease',
+                  boxShadow: 'none',
                 }}
               >
                 <RefreshCw size={18} className={isProcessing ? 'animate-spin' : ''} />
@@ -523,25 +531,27 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
         </div>
       )}
 
-      {/* TELA 2: ÁRVORE DE AUTENTICAÇÃO MONTADA DO ZERO (FUNDO #111 E #222) */}
+      {/* TELA 2: ÁRVORE DE AUTENTICAÇÃO E CADASTRO LIMPOS, EDITÁVEIS E SEM PANO DE FUNDO */}
       {screen === 'auth_tree' && (
         <div
           key={`bitx-auth-tree-instance-${treeInstanceKey}`}
           style={{
             width: '100%',
-            maxWidth: '640px',
-            background: '#111111',
+            maxWidth: '680px',
+            backgroundColor: '#111111',
+            backgroundImage: 'none', // Sem pano de fundo
             border: '1px solid #222222',
-            borderRadius: '12px',
-            boxShadow: '0 25px 60px -10px rgba(0, 0, 0, 0.95), 0 0 35px rgba(249, 115, 22, 0.12)',
+            borderRadius: '10px',
+            boxShadow: 'none', // Sem halos decorativos ou sombras com gradiente
             overflow: 'hidden',
           }}
         >
-          {/* Header Superior da Interface de Autenticação */}
+          {/* Header Superior - Sólido #222222 sem pano de fundo */}
           <div
             style={{
-              background: '#222222',
-              borderBottom: '1px solid #2f2f2f',
+              backgroundColor: '#222222',
+              backgroundImage: 'none',
+              borderBottom: '1px solid #333333',
               padding: '16px 24px',
               display: 'flex',
               alignItems: 'center',
@@ -554,12 +564,12 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   width: '38px',
                   height: '38px',
                   borderRadius: '8px',
-                  background: '#f97316',
+                  backgroundColor: '#f97316',
+                  backgroundImage: 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: '#ffffff',
-                  boxShadow: '0 0 12px rgba(249, 115, 22, 0.4)',
                 }}
               >
                 <ShieldCheck size={22} />
@@ -575,7 +585,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     textTransform: 'uppercase',
                   }}
                 >
-                  BitX Core — Autenticação de Operador
+                  BitX Core — Painel Operacional
                 </h2>
                 <p
                   style={{
@@ -584,7 +594,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     color: '#94a3b8',
                   }}
                 >
-                  Cofre Desktop Persistente • Zero-State Rebuilt • Sem Credenciais Hardcoded
+                  Cofre Desktop Persistente • Campos Editáveis • Sem Pano de Fundo
                 </p>
               </div>
             </div>
@@ -592,10 +602,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             <button
               type="button"
               onClick={() => setScreen('locked_summary')}
-              title="Voltar ao relatório de purga"
+              title="Ver detalhes de segurança"
               style={{
-                background: '#111111',
-                border: '1px solid #2f2f2f',
+                backgroundColor: '#111111',
+                backgroundImage: 'none',
+                border: '1px solid #333333',
                 color: '#94a3b8',
                 borderRadius: '6px',
                 padding: '6px 12px',
@@ -607,14 +618,15 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               }}
             >
               <ArrowLeft size={13} />
-              <span>Voltar</span>
+              <span>Status Purga</span>
             </button>
           </div>
 
-          {/* Abas Internas Dinâmicas (#111 e #222) */}
+          {/* Abas Superiores Dinâmicas (#111111 e #222222 sem pano de fundo) */}
           <div
             style={{
-              background: '#111111',
+              backgroundColor: '#111111',
+              backgroundImage: 'none',
               borderBottom: '1px solid #222222',
               padding: '8px 24px 0 24px',
               display: 'flex',
@@ -630,7 +642,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               }}
               style={{
                 flex: 1,
-                background: activeTab === 'login' ? '#222222' : 'transparent',
+                backgroundColor: activeTab === 'login' ? '#222222' : 'transparent',
+                backgroundImage: 'none',
                 color: activeTab === 'login' ? '#f97316' : '#94a3b8',
                 border: '1px solid',
                 borderColor:
@@ -661,7 +674,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               }}
               style={{
                 flex: 1,
-                background: activeTab === 'register_admin' ? '#222222' : 'transparent',
+                backgroundColor: activeTab === 'register_admin' ? '#222222' : 'transparent',
+                backgroundImage: 'none',
                 color: activeTab === 'register_admin' ? '#f97316' : '#94a3b8',
                 border: '1px solid',
                 borderColor:
@@ -687,13 +701,14 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             </button>
           </div>
 
-          {/* Corpo do Formulário com Fundo Escuro #111 e #222 */}
-          <div style={{ padding: '24px 28px', background: '#111111' }}>
+          {/* Corpo do Formulário com Fundo Escuro Limpo (#111111) sem pano de fundo */}
+          <div style={{ padding: '24px 28px', backgroundColor: '#111111', backgroundImage: 'none' }}>
             {/* Mensagem de Erro Inline */}
             {authError && (
               <div
                 style={{
-                  background: '#222222',
+                  backgroundColor: '#222222',
+                  backgroundImage: 'none',
                   border: '1px solid #ef4444',
                   borderRadius: '6px',
                   padding: '12px 16px',
@@ -714,7 +729,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             {authSuccess && (
               <div
                 style={{
-                  background: '#222222',
+                  backgroundColor: '#222222',
+                  backgroundImage: 'none',
                   border: '1px solid #22c55e',
                   borderRadius: '6px',
                   padding: '12px 16px',
@@ -731,7 +747,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               </div>
             )}
 
-            {/* ABA 1: ACESSAR PAINEL (LOGIN/SENHA) */}
+            {/* ABA 1: ACESSAR PAINEL (LOGIN/SENHA) — EDITÁVEL, LIMPA E SEM PANO DE FUNDO */}
             {activeTab === 'login' && (
               <form onSubmit={handleLoginSubmit} autoComplete="off">
                 <div style={{ marginBottom: '16px' }}>
@@ -761,7 +777,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
+                        backgroundColor: '#222222',
+                        backgroundImage: 'none', // Sem pano de fundo
                         border: '1px solid #333333',
                         borderRadius: '6px',
                         padding: '12px 14px 12px 38px',
@@ -778,7 +795,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     />
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Campo aberto e editável para digitação manual do operador.
+                    Campo 100% editável e limpo para digitação manual do operador.
                   </div>
                 </div>
 
@@ -809,7 +826,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
+                        backgroundColor: '#222222',
+                        backgroundImage: 'none', // Sem pano de fundo
                         border: '1px solid #333333',
                         borderRadius: '6px',
                         padding: '12px 42px 12px 38px',
@@ -843,15 +861,16 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     </button>
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Validação segura em cofre criptografado local sem credenciais estáticas.
+                    Validação em cofre persistente desktop sem credenciais hardcoded.
                   </div>
                 </div>
 
-                {/* Seleção de Conexão Blockchain */}
+                {/* Seleção de Conexão Blockchain - Fundo Plano #222222 */}
                 <div
                   style={{
-                    background: '#222222',
-                    border: '1px solid #2a2a2a',
+                    backgroundColor: '#222222',
+                    backgroundImage: 'none',
+                    border: '1px solid #333333',
                     borderRadius: '8px',
                     padding: '12px 14px',
                     marginBottom: '20px',
@@ -873,7 +892,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="button"
                       onClick={() => setProviderMode('mainnet')}
                       style={{
-                        background: providerMode === 'mainnet' ? '#111111' : '#222222',
+                        backgroundColor: providerMode === 'mainnet' ? '#111111' : '#222222',
+                        backgroundImage: 'none',
                         border: `1px solid ${providerMode === 'mainnet' ? '#f97316' : '#333333'}`,
                         borderRadius: '6px',
                         padding: '8px 10px',
@@ -893,7 +913,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="button"
                       onClick={() => setProviderMode('local_rpc')}
                       style={{
-                        background: providerMode === 'local_rpc' ? '#111111' : '#222222',
+                        backgroundColor: providerMode === 'local_rpc' ? '#111111' : '#222222',
+                        backgroundImage: 'none',
                         border: `1px solid ${providerMode === 'local_rpc' ? '#38bdf8' : '#333333'}`,
                         borderRadius: '6px',
                         padding: '8px 10px',
@@ -922,7 +943,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         marginTop: '8px',
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#111111',
+                        backgroundColor: '#111111',
+                        backgroundImage: 'none',
                         border: '1px solid #333333',
                         borderRadius: '6px',
                         padding: '8px 10px',
@@ -934,14 +956,13 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   )}
                 </div>
 
-                {/* Botão de Envio Login */}
+                {/* Botão de Envio Login - Fundo Sólido #f97316 sem gradiente */}
                 <button
                   type="submit"
                   style={{
                     width: '100%',
-                    background: isProcessing
-                      ? '#334155'
-                      : 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                    backgroundColor: isProcessing ? '#333333' : '#f97316',
+                    backgroundImage: 'none', // Sem pano de fundo
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '8px',
@@ -954,7 +975,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 12px rgba(234, 88, 12, 0.3)',
+                    boxShadow: 'none',
+                    transition: 'background 0.15s ease',
                   }}
                 >
                   <Lock size={16} />
@@ -965,16 +987,18 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               </form>
             )}
 
-            {/* ABA 2: CADASTRAR ADMINISTRADOR GERAL (PESSOAL) */}
+            {/* ABA 2: CADASTRAR ADMINISTRADOR GERAL (PESSOAL) — TODAS AS SUB-ABAS LIMPAS, SEM PANO DE FUNDO E 100% EDITÁVEIS */}
             {activeTab === 'register_admin' && (
               <form onSubmit={handleRegisterAdminSubmit} autoComplete="off">
+                {/* Banner de Identificação Desktop Seguro - Fundo Plano #222222 */}
                 <div
                   style={{
-                    background: '#222222',
-                    border: '1px solid #2a2a2a',
+                    backgroundColor: '#222222',
+                    backgroundImage: 'none', // Sem pano de fundo
+                    border: '1px solid #333333',
                     borderRadius: '8px',
                     padding: '10px 14px',
-                    marginBottom: '16px',
+                    marginBottom: '14px',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
@@ -988,295 +1012,413 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   </div>
                 </div>
 
+                {/* Sub-Abas do Painel Cadastrar Administrador Geral (Totalmente limpas e sem pano de fundo) */}
                 <div
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '12px',
-                    marginBottom: '12px',
+                    display: 'flex',
+                    gap: '8px',
+                    marginBottom: '16px',
+                    borderBottom: '1px solid #222222',
+                    paddingBottom: '8px',
                   }}
                 >
-                  <div>
-                    <label
-                      htmlFor="reg-fullname"
-                      style={{
-                        display: 'block',
-                        fontSize: '11px',
-                        color: '#94a3b8',
-                        fontWeight: 600,
-                        marginBottom: '4px',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      Nome Completo (Pessoal) *
-                    </label>
-                    <input
-                      type="text"
-                      id="reg-fullname"
-                      placeholder="Digite o nome completo do operador"
-                      value={regFullName}
-                      onChange={(e) => setRegFullName(e.target.value)}
-                      autoComplete="off"
-                      spellCheck={false}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        color: '#ffffff',
-                        fontSize: '12px',
-                        fontFamily: "'DM Mono', monospace, sans-serif",
-                      }}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubTab('all')}
+                    style={{
+                      backgroundColor: adminSubTab === 'all' ? '#222222' : 'transparent',
+                      backgroundImage: 'none',
+                      color: adminSubTab === 'all' ? '#f97316' : '#94a3b8',
+                      border: '1px solid',
+                      borderColor: adminSubTab === 'all' ? '#333333' : 'transparent',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <FileText size={13} />
+                    <span>Todas as Informações</span>
+                  </button>
 
-                  <div>
-                    <label
-                      htmlFor="reg-doc"
-                      style={{
-                        display: 'block',
-                        fontSize: '11px',
-                        color: '#94a3b8',
-                        fontWeight: 600,
-                        marginBottom: '4px',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      Documento / CPF / Matrícula
-                    </label>
-                    <input
-                      type="text"
-                      id="reg-doc"
-                      placeholder="Digite o documento ou CPF"
-                      value={regDocument}
-                      onChange={(e) => setRegDocument(e.target.value)}
-                      autoComplete="off"
-                      spellCheck={false}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        color: '#ffffff',
-                        fontSize: '12px',
-                        fontFamily: "'DM Mono', monospace, sans-serif",
-                      }}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubTab('personal')}
+                    style={{
+                      backgroundColor: adminSubTab === 'personal' ? '#222222' : 'transparent',
+                      backgroundImage: 'none',
+                      color: adminSubTab === 'personal' ? '#f97316' : '#94a3b8',
+                      border: '1px solid',
+                      borderColor: adminSubTab === 'personal' ? '#333333' : 'transparent',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <User size={13} />
+                    <span>Dados Pessoais</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubTab('credentials')}
+                    style={{
+                      backgroundColor: adminSubTab === 'credentials' ? '#222222' : 'transparent',
+                      backgroundImage: 'none',
+                      color: adminSubTab === 'credentials' ? '#f97316' : '#94a3b8',
+                      border: '1px solid',
+                      borderColor: adminSubTab === 'credentials' ? '#333333' : 'transparent',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Key size={13} />
+                    <span>Credenciais de Acesso</span>
+                  </button>
                 </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '12px',
-                    marginBottom: '12px',
-                  }}
-                >
-                  <div>
-                    <label
-                      htmlFor="reg-email"
+                {/* SEÇÃO 1: DADOS PESSOAIS (Renderizada se 'all' ou 'personal') */}
+                {(adminSubTab === 'all' || adminSubTab === 'personal') && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <div
                       style={{
-                        display: 'block',
                         fontSize: '11px',
-                        color: '#94a3b8',
-                        fontWeight: 600,
-                        marginBottom: '4px',
+                        color: '#f97316',
+                        fontWeight: 700,
                         textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        marginBottom: '10px',
                       }}
                     >
-                      E-mail Institucional / Pessoal *
-                    </label>
-                    <input
-                      type="email"
-                      id="reg-email"
-                      placeholder="Digite seu e-mail institucional ou pessoal"
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      autoComplete="off"
-                      spellCheck={false}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        color: '#ffffff',
-                        fontSize: '12px',
-                        fontFamily: "'DM Mono', monospace, sans-serif",
-                      }}
-                    />
-                  </div>
+                      1. Identificação do Titular / Pessoal
+                    </div>
 
-                  <div>
-                    <label
-                      htmlFor="reg-username"
+                    <div
                       style={{
-                        display: 'block',
-                        fontSize: '11px',
-                        color: '#94a3b8',
-                        fontWeight: 600,
-                        marginBottom: '4px',
-                        textTransform: 'uppercase',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '12px',
+                        marginBottom: '12px',
                       }}
                     >
-                      Usuário de Acesso Operacional *
-                    </label>
-                    <input
-                      type="text"
-                      id="reg-username"
-                      placeholder="Digite seu usuário de acesso operacional"
-                      value={regUsername}
-                      onChange={(e) => setRegUsername(e.target.value)}
-                      autoComplete="off"
-                      spellCheck={false}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        color: '#ffffff',
-                        fontSize: '12px',
-                        fontFamily: "'DM Mono', monospace, sans-serif",
-                      }}
-                    />
-                  </div>
-                </div>
+                      <div>
+                        <label
+                          htmlFor="reg-fullname"
+                          style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            color: '#94a3b8',
+                            fontWeight: 600,
+                            marginBottom: '4px',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Nome Completo (Pessoal) *
+                        </label>
+                        <input
+                          type="text"
+                          id="reg-fullname"
+                          placeholder="Digite o nome completo do operador"
+                          value={regFullName}
+                          onChange={(e) => setRegFullName(e.target.value)}
+                          autoComplete="off"
+                          spellCheck={false}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            backgroundColor: '#222222',
+                            backgroundImage: 'none', // Sem pano de fundo
+                            border: '1px solid #333333',
+                            borderRadius: '6px',
+                            padding: '10px 12px',
+                            color: '#ffffff',
+                            fontSize: '12px',
+                            fontFamily: "'DM Mono', monospace, sans-serif",
+                            outline: 'none',
+                          }}
+                        />
+                      </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '12px',
-                    marginBottom: '20px',
-                  }}
-                >
-                  <div>
-                    <label
-                      htmlFor="reg-password"
-                      style={{
-                        display: 'block',
-                        fontSize: '11px',
-                        color: '#94a3b8',
-                        fontWeight: 600,
-                        marginBottom: '4px',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      Senha Mestra (Mín. 6 chars) *
-                    </label>
-                    <div style={{ position: 'relative' }}>
+                      <div>
+                        <label
+                          htmlFor="reg-doc"
+                          style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            color: '#94a3b8',
+                            fontWeight: 600,
+                            marginBottom: '4px',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Documento / CPF / Matrícula
+                        </label>
+                        <input
+                          type="text"
+                          id="reg-doc"
+                          placeholder="Digite o documento ou CPF"
+                          value={regDocument}
+                          onChange={(e) => setRegDocument(e.target.value)}
+                          autoComplete="off"
+                          spellCheck={false}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            backgroundColor: '#222222',
+                            backgroundImage: 'none', // Sem pano de fundo
+                            border: '1px solid #333333',
+                            borderRadius: '6px',
+                            padding: '10px 12px',
+                            color: '#ffffff',
+                            fontSize: '12px',
+                            fontFamily: "'DM Mono', monospace, sans-serif",
+                            outline: 'none',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <label
+                        htmlFor="reg-email"
+                        style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          color: '#94a3b8',
+                          fontWeight: 600,
+                          marginBottom: '4px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        E-mail Institucional / Pessoal *
+                      </label>
                       <input
-                        type={showRegPassword ? 'text' : 'password'}
-                        id="reg-password"
-                        placeholder="Digite a senha mestra"
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
+                        type="email"
+                        id="reg-email"
+                        placeholder="Digite seu e-mail institucional ou pessoal"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
                         autoComplete="off"
                         spellCheck={false}
                         style={{
                           width: '100%',
                           boxSizing: 'border-box',
-                          background: '#222222',
+                          backgroundColor: '#222222',
+                          backgroundImage: 'none', // Sem pano de fundo
                           border: '1px solid #333333',
                           borderRadius: '6px',
-                          padding: '10px 36px 10px 12px',
+                          padding: '10px 12px',
                           color: '#ffffff',
                           fontSize: '12px',
                           fontFamily: "'DM Mono', monospace, sans-serif",
+                          outline: 'none',
                         }}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowRegPassword((prev) => !prev)}
-                        style={{
-                          position: 'absolute',
-                          right: '8px',
-                          top: '8px',
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#94a3b8',
-                          cursor: 'pointer',
-                          padding: '2px',
-                        }}
-                        title={showRegPassword ? 'Ocultar' : 'Exibir'}
-                      >
-                        {showRegPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
                     </div>
                   </div>
+                )}
 
-                  <div>
-                    <label
-                      htmlFor="reg-password-confirm"
+                {/* SEÇÃO 2: CREDENCIAIS OPERACIONAIS (Renderizada se 'all' ou 'credentials') */}
+                {(adminSubTab === 'all' || adminSubTab === 'credentials') && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <div
                       style={{
-                        display: 'block',
                         fontSize: '11px',
-                        color: '#94a3b8',
-                        fontWeight: 600,
-                        marginBottom: '4px',
+                        color: '#f97316',
+                        fontWeight: 700,
                         textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        marginBottom: '10px',
                       }}
                     >
-                      Confirmar Senha *
-                    </label>
-                    <div style={{ position: 'relative' }}>
+                      2. Credenciais de Acesso & Senha Mestra
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                      <label
+                        htmlFor="reg-username"
+                        style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          color: '#94a3b8',
+                          fontWeight: 600,
+                          marginBottom: '4px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        Usuário de Acesso Operacional *
+                      </label>
                       <input
-                        type={showRegConfirm ? 'text' : 'password'}
-                        id="reg-password-confirm"
-                        placeholder="Confirme a senha mestra"
-                        value={regPasswordConfirm}
-                        onChange={(e) => setRegPasswordConfirm(e.target.value)}
+                        type="text"
+                        id="reg-username"
+                        placeholder="Digite seu usuário de acesso operacional"
+                        value={regUsername}
+                        onChange={(e) => setRegUsername(e.target.value)}
                         autoComplete="off"
                         spellCheck={false}
                         style={{
                           width: '100%',
                           boxSizing: 'border-box',
-                          background: '#222222',
+                          backgroundColor: '#222222',
+                          backgroundImage: 'none', // Sem pano de fundo
                           border: '1px solid #333333',
                           borderRadius: '6px',
-                          padding: '10px 36px 10px 12px',
+                          padding: '10px 12px',
                           color: '#ffffff',
                           fontSize: '12px',
                           fontFamily: "'DM Mono', monospace, sans-serif",
+                          outline: 'none',
                         }}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowRegConfirm((prev) => !prev)}
-                        style={{
-                          position: 'absolute',
-                          right: '8px',
-                          top: '8px',
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#94a3b8',
-                          cursor: 'pointer',
-                          padding: '2px',
-                        }}
-                        title={showRegConfirm ? 'Ocultar' : 'Exibir'}
-                      >
-                        {showRegConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '12px',
+                        marginBottom: '12px',
+                      }}
+                    >
+                      <div>
+                        <label
+                          htmlFor="reg-password"
+                          style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            color: '#94a3b8',
+                            fontWeight: 600,
+                            marginBottom: '4px',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Senha Mestra (Mín. 6 chars) *
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showRegPassword ? 'text' : 'password'}
+                            id="reg-password"
+                            placeholder="Digite a senha mestra"
+                            value={regPassword}
+                            onChange={(e) => setRegPassword(e.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              backgroundColor: '#222222',
+                              backgroundImage: 'none', // Sem pano de fundo
+                              border: '1px solid #333333',
+                              borderRadius: '6px',
+                              padding: '10px 36px 10px 12px',
+                              color: '#ffffff',
+                              fontSize: '12px',
+                              fontFamily: "'DM Mono', monospace, sans-serif",
+                              outline: 'none',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowRegPassword((prev) => !prev)}
+                            style={{
+                              position: 'absolute',
+                              right: '8px',
+                              top: '8px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#94a3b8',
+                              cursor: 'pointer',
+                              padding: '2px',
+                            }}
+                            title={showRegPassword ? 'Ocultar' : 'Exibir'}
+                          >
+                            {showRegPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="reg-password-confirm"
+                          style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            color: '#94a3b8',
+                            fontWeight: 600,
+                            marginBottom: '4px',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Confirmar Senha *
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showRegConfirm ? 'text' : 'password'}
+                            id="reg-password-confirm"
+                            placeholder="Confirme a senha mestra"
+                            value={regPasswordConfirm}
+                            onChange={(e) => setRegPasswordConfirm(e.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              backgroundColor: '#222222',
+                              backgroundImage: 'none', // Sem pano de fundo
+                              border: '1px solid #333333',
+                              borderRadius: '6px',
+                              padding: '10px 36px 10px 12px',
+                              color: '#ffffff',
+                              fontSize: '12px',
+                              fontFamily: "'DM Mono', monospace, sans-serif",
+                              outline: 'none',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowRegConfirm((prev) => !prev)}
+                            style={{
+                              position: 'absolute',
+                              right: '8px',
+                              top: '8px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#94a3b8',
+                              cursor: 'pointer',
+                              padding: '2px',
+                            }}
+                            title={showRegConfirm ? 'Ocultar' : 'Exibir'}
+                          >
+                            {showRegConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Botão de Envio Cadastro */}
+                {/* Botão de Envio Cadastro - Fundo Sólido #16a34a sem gradiente */}
                 <button
                   type="submit"
                   style={{
                     width: '100%',
-                    background: isProcessing
-                      ? '#334155'
-                      : 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+                    backgroundColor: isProcessing ? '#333333' : '#16a34a',
+                    backgroundImage: 'none', // Sem pano de fundo
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '8px',
@@ -1289,7 +1431,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)',
+                    boxShadow: 'none',
+                    transition: 'background 0.15s ease',
                   }}
                 >
                   <UserPlus size={16} />
