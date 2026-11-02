@@ -53,12 +53,12 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   const [providerMode, setProviderMode] = useState<'mainnet' | 'local_rpc'>('mainnet');
   const [customRpcUrl, setCustomRpcUrl] = useState('');
 
-  // Estado da aba 'Acessar Painel' (Login/Senha) — Totalmente limpos e editáveis (value="")
+  // Estado da aba 'Acessar Painel' (Login/Senha) — Nascem estritamente vazios (value = "")
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  // Estado da aba 'Cadastrar Administrador Geral' (Pessoal) — Totalmente limpos e editáveis (value="")
+  // Estado da aba 'Cadastrar Administrador Geral' (Pessoal) — Nascem estritamente vazios (value = "")
   const [regFullName, setRegFullName] = useState('');
   const [regDocument, setRegDocument] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -72,6 +72,34 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Forçar limpeza via JavaScript no primeiro milissegundo do carregamento
+  useEffect(() => {
+    // Definir window.onload conforme especificação do operador
+    window.onload = () => {
+      document.querySelectorAll('input').forEach((i) => {
+        (i as HTMLInputElement).value = '';
+      });
+    };
+
+    // Execução imediata no primeiro milissegundo
+    const executePurge = () => {
+      document.querySelectorAll('input').forEach((i) => {
+        (i as HTMLInputElement).value = '';
+      });
+    };
+
+    executePurge();
+    const t1 = setTimeout(executePurge, 1);
+    const t2 = setTimeout(executePurge, 10);
+    const t3 = setTimeout(executePurge, 50);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [treeInstanceKey, activeTab]);
 
   // Garantir carregamento assíncrono do cofre desktop na montagem
   useEffect(() => {
@@ -110,6 +138,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
       setRegPassword('');
       setRegPasswordConfirm('');
       setScreen('auth_tree');
+
+      // Forçar limpeza direta em todos os inputs
+      document.querySelectorAll('input').forEach((i) => {
+        (i as HTMLInputElement).value = '';
+      });
 
       const meta = persistentVault.getVaultMetadata();
       setVaultMetadata(meta);
@@ -772,7 +805,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       placeholder="Digite seu usuário ou e-mail"
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
-                      autoComplete="off"
+                      autoComplete="new-password"
                       spellCheck={false}
                       style={{
                         width: '100%',
@@ -821,7 +854,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       placeholder="Digite sua senha"
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      autoComplete="off"
+                      autoComplete="new-password"
                       spellCheck={false}
                       style={{
                         width: '100%',
@@ -937,7 +970,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       value={customRpcUrl}
                       onChange={(e) => setCustomRpcUrl(e.target.value)}
                       placeholder="http://127.0.0.1:8332"
-                      autoComplete="off"
+                      autoComplete="new-password"
                       spellCheck={false}
                       style={{
                         marginTop: '8px',
@@ -1136,7 +1169,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                           placeholder="Digite o nome completo do operador"
                           value={regFullName}
                           onChange={(e) => setRegFullName(e.target.value)}
-                          autoComplete="off"
+                          autoComplete="new-password"
                           spellCheck={false}
                           style={{
                             width: '100%',
@@ -1174,7 +1207,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                           placeholder="Digite o documento ou CPF"
                           value={regDocument}
                           onChange={(e) => setRegDocument(e.target.value)}
-                          autoComplete="off"
+                          autoComplete="new-password"
                           spellCheck={false}
                           style={{
                             width: '100%',
@@ -1213,7 +1246,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         placeholder="Digite seu e-mail institucional ou pessoal"
                         value={regEmail}
                         onChange={(e) => setRegEmail(e.target.value)}
-                        autoComplete="off"
+                        autoComplete="new-password"
                         spellCheck={false}
                         style={{
                           width: '100%',
@@ -1269,7 +1302,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         placeholder="Digite seu usuário de acesso operacional"
                         value={regUsername}
                         onChange={(e) => setRegUsername(e.target.value)}
-                        autoComplete="off"
+                        autoComplete="new-password"
                         spellCheck={false}
                         style={{
                           width: '100%',
@@ -1316,7 +1349,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                             placeholder="Digite a senha mestra"
                             value={regPassword}
                             onChange={(e) => setRegPassword(e.target.value)}
-                            autoComplete="off"
+                            autoComplete="new-password"
                             spellCheck={false}
                             style={{
                               width: '100%',
@@ -1373,7 +1406,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                             placeholder="Confirme a senha mestra"
                             value={regPasswordConfirm}
                             onChange={(e) => setRegPasswordConfirm(e.target.value)}
-                            autoComplete="off"
+                            autoComplete="new-password"
                             spellCheck={false}
                             style={{
                               width: '100%',

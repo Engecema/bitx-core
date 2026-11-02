@@ -304,7 +304,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     placeholder="Digite seu usuário ou e-mail"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="off"
+                    autoComplete="new-password"
                     style={{ backgroundImage: 'none' }}
                     required
                   />
@@ -318,7 +318,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       placeholder="Digite sua senha"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      autoComplete="off"
+                      autoComplete="new-password"
                       style={{ backgroundImage: 'none' }}
                       required
                     />
@@ -552,7 +552,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       placeholder="Novo usuário"
                       value={newUser}
                       onChange={(e) => setNewUser(e.target.value)}
-                      style={{ marginBottom: '6px' }}
+                      autoComplete="new-password"
+                      style={{ marginBottom: '6px', backgroundImage: 'none' }}
                       required
                     />
                     <div className="admin-password-field-group">
@@ -561,6 +562,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         placeholder="Senha do novo usuário"
                         value={newPass}
                         onChange={(e) => setNewPass(e.target.value)}
+                        autoComplete="new-password"
+                        style={{ backgroundImage: 'none' }}
                         required
                       />
                       <button

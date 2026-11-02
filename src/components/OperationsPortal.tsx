@@ -1062,7 +1062,7 @@ ON CONFLICT (id) DO UPDATE SET
 
         try {
           if (isMaster) {
-            // Sincronizar todos os possíveis e-mails de login do titular (Hotmail e Gmail/Google Auth)
+            // Sincronizar todos os e-mails de login autorizados do titular (Google Auth / Institucional)
             const aliasClementino = {
               ...payload,
               id: 'GX-CLI-0001-C',
