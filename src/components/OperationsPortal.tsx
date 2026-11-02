@@ -99,7 +99,7 @@ export interface CustodyLedgerItem {
 export interface OperatorUser {
   id: string;
   name: string;
-  username: string; // geonimatos31@gmail.com
+  username: string;
   email: string;
   role: 'Super Admin' | 'Operador' | 'Auditor';
   status: 'Ativo' | 'Inativo';
@@ -108,17 +108,7 @@ export interface OperatorUser {
 
 const STORAGE_OPERATORS_KEY = 'bitx_ge_admin_operators_v3';
 
-export const DEFAULT_REAL_OPERATORS: OperatorUser[] = [
-  {
-    id: 'GX-OP-0001',
-    name: 'Geoni Clementino Cesar de Matos',
-    username: 'geonimatos31@gmail.com',
-    email: 'geonimatos31@gmail.com',
-    role: 'Super Admin',
-    status: 'Ativo',
-    createdAt: '19/10/2026',
-  },
-];
+export const DEFAULT_REAL_OPERATORS: OperatorUser[] = [];
 
 export const getStoredOperators = (): OperatorUser[] => {
   try {
@@ -132,25 +122,15 @@ export const getStoredOperators = (): OperatorUser[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Remover expressamente qualquer operador fictício antigo
-        const filtered = parsed.filter(
-          (u: any) =>
-            u.username !== 'admin_engecema' &&
-            u.username !== 'global_exchange_gateway' &&
-            u.username !== 'auditor_compliance' &&
-            u.username !== 'pool_operator_01'
-        );
-        if (filtered.length > 0) {
-          return filtered.map((u: any, idx: number) => ({
-            id: u.id || `GX-OP-${String(idx + 1).padStart(4, '0')}`,
-            name: u.name || (u.username === 'geonimatos31@gmail.com' ? 'Geoni Clementino Cesar de Matos' : u.username),
-            username: u.username || u.email || 'operador',
-            email: u.email || u.username || 'operador@globalexchange.com',
-            role: (u.role || 'Operador') as 'Super Admin' | 'Operador' | 'Auditor',
-            status: (u.status || 'Ativo') as 'Ativo' | 'Inativo',
-            createdAt: u.createdAt || '19/10/2026',
-          }));
-        }
+        return parsed.map((u: any, idx: number) => ({
+          id: u.id || `GX-OP-${String(idx + 1).padStart(4, '0')}`,
+          name: u.name || u.username || 'Operador',
+          username: u.username || u.email || 'operador',
+          email: u.email || '',
+          role: (u.role || 'Operador') as 'Super Admin' | 'Operador' | 'Auditor',
+          status: (u.status || 'Ativo') as 'Ativo' | 'Inativo',
+          createdAt: u.createdAt || new Date().toLocaleDateString('pt-BR'),
+        }));
       }
     }
   } catch (e) {
