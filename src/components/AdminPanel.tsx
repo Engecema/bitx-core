@@ -295,14 +295,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              <form onSubmit={handleLogin}>
+              <form onSubmit={handleLogin} autoComplete="off">
                 <div className="admin-form-group">
                   <label htmlFor="username">Usuário Administrador</label>
                   <input
                     type="text"
                     id="username"
+                    placeholder="Digite seu usuário ou e-mail"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    readOnly={false}
+                    disabled={false}
                     required
                   />
                 </div>
@@ -312,8 +317,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <input
                       type={showPassword ? 'text' : 'password'}
                       id="password"
+                      placeholder="Digite sua senha"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       required
                     />
                     <button

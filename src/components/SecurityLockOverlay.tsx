@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { securityGuard, SecurityStatus } from '../utils/securityGuard';
 import { persistentVault, GeneralAdminRecord } from '../utils/persistentVault';
+import '../styles/admin.css';
 
 interface SecurityLockOverlayProps {
   status: SecurityStatus;
@@ -31,8 +32,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
   status,
   onReinitialize,
 }) => {
-  // Controle de tela e montagem limpa da árvore de componentes
-  const [screen, setScreen] = useState<OverlayScreen>('locked_summary');
+  // Inicia diretamente na tela de autenticação/cadastro limpa e editável
+  const [screen, setScreen] = useState<OverlayScreen>('auth_tree');
   const [treeInstanceKey, setTreeInstanceKey] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
 
@@ -254,8 +255,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
         position: 'fixed',
         inset: 0,
         zIndex: 999999,
-        backgroundColor: '#111111',
-        backgroundImage: 'radial-gradient(circle at 50% 20%, #222222 0%, #111111 80%)',
+        backgroundColor: '#070b10',
+        backgroundImage: 'none',
         color: '#f1f5f9',
         fontFamily: "'DM Mono', monospace, -apple-system, sans-serif",
         display: 'flex',
@@ -523,25 +524,25 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
         </div>
       )}
 
-      {/* TELA 2: ÁRVORE DE AUTENTICAÇÃO MONTADA DO ZERO (FUNDO #111 E #222) */}
+      {/* TELA 2: ÁRVORE DE AUTENTICAÇÃO LIMPA E EDITÁVEL (ZERO BACKGROUND NAS ABAS) */}
       {screen === 'auth_tree' && (
         <div
           key={`bitx-auth-tree-instance-${treeInstanceKey}`}
           style={{
             width: '100%',
             maxWidth: '640px',
-            background: '#111111',
-            border: '1px solid #222222',
+            backgroundColor: '#0d131f',
+            border: '1px solid #1e293b',
             borderRadius: '12px',
-            boxShadow: '0 25px 60px -10px rgba(0, 0, 0, 0.95), 0 0 35px rgba(249, 115, 22, 0.12)',
+            boxShadow: 'none',
             overflow: 'hidden',
           }}
         >
           {/* Header Superior da Interface de Autenticação */}
           <div
             style={{
-              background: '#222222',
-              borderBottom: '1px solid #2f2f2f',
+              backgroundColor: '#090d16',
+              borderBottom: '1px solid #1e293b',
               padding: '16px 24px',
               display: 'flex',
               alignItems: 'center',
@@ -554,12 +555,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   width: '38px',
                   height: '38px',
                   borderRadius: '8px',
-                  background: '#f97316',
+                  backgroundColor: '#f97316',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: '#ffffff',
-                  boxShadow: '0 0 12px rgba(249, 115, 22, 0.4)',
                 }}
               >
                 <ShieldCheck size={22} />
@@ -594,8 +594,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               onClick={() => setScreen('locked_summary')}
               title="Voltar ao relatório de purga"
               style={{
-                background: '#111111',
-                border: '1px solid #2f2f2f',
+                backgroundColor: 'transparent',
+                border: '1px solid #1e293b',
                 color: '#94a3b8',
                 borderRadius: '6px',
                 padding: '6px 12px',
@@ -611,18 +611,19 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             </button>
           </div>
 
-          {/* Abas Internas Dinâmicas (#111 e #222) */}
+          {/* Abas Internas Dinâmicas — 100% Isentas de Pano de Fundo */}
           <div
+            className="auth-nav-tabs"
             style={{
-              background: '#111111',
-              borderBottom: '1px solid #222222',
+              borderBottom: '1px solid #1e293b',
               padding: '8px 24px 0 24px',
               display: 'flex',
-              gap: '10px',
+              gap: '12px',
             }}
           >
             <button
               type="button"
+              className={`auth-nav-tab ${activeTab === 'login' ? 'is-active' : ''}`}
               onClick={() => {
                 setActiveTab('login');
                 setAuthError(null);
@@ -630,13 +631,10 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               }}
               style={{
                 flex: 1,
-                background: activeTab === 'login' ? '#222222' : 'transparent',
                 color: activeTab === 'login' ? '#f97316' : '#94a3b8',
-                border: '1px solid',
-                borderColor:
-                  activeTab === 'login' ? '#333333 #333333 #222222 #333333' : 'transparent',
-                borderBottom: activeTab === 'login' ? '2px solid #f97316' : '1px solid transparent',
-                borderRadius: '8px 8px 0 0',
+                border: 'none',
+                borderBottom: activeTab === 'login' ? '2px solid #f97316' : '2px solid transparent',
+                borderRadius: 0,
                 padding: '12px 16px',
                 fontSize: '13px',
                 fontWeight: 600,
@@ -645,7 +643,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                transition: 'all 0.15s ease',
+                transition: 'color 0.15s ease, border-color 0.15s ease',
               }}
             >
               <User size={16} />
@@ -654,6 +652,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
             <button
               type="button"
+              className={`auth-nav-tab ${activeTab === 'register_admin' ? 'is-active' : ''}`}
               onClick={() => {
                 setActiveTab('register_admin');
                 setAuthError(null);
@@ -661,16 +660,11 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               }}
               style={{
                 flex: 1,
-                background: activeTab === 'register_admin' ? '#222222' : 'transparent',
                 color: activeTab === 'register_admin' ? '#f97316' : '#94a3b8',
-                border: '1px solid',
-                borderColor:
-                  activeTab === 'register_admin'
-                    ? '#333333 #333333 #222222 #333333'
-                    : 'transparent',
+                border: 'none',
                 borderBottom:
-                  activeTab === 'register_admin' ? '2px solid #f97316' : '1px solid transparent',
-                borderRadius: '8px 8px 0 0',
+                  activeTab === 'register_admin' ? '2px solid #f97316' : '2px solid transparent',
+                borderRadius: 0,
                 padding: '12px 16px',
                 fontSize: '13px',
                 fontWeight: 600,
@@ -679,7 +673,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                transition: 'all 0.15s ease',
+                transition: 'color 0.15s ease, border-color 0.15s ease',
               }}
             >
               <UserPlus size={16} />
@@ -687,8 +681,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             </button>
           </div>
 
-          {/* Corpo do Formulário com Fundo Escuro #111 e #222 */}
-          <div style={{ padding: '24px 28px', background: '#111111' }}>
+          {/* Corpo do Formulário Limpo */}
+          <div style={{ padding: '24px 28px', backgroundColor: '#0d131f' }}>
             {/* Mensagem de Erro Inline */}
             {authError && (
               <div
@@ -751,18 +745,21 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
-                      type="email"
+                      type="text"
                       id="login-email"
                       placeholder="Digite seu usuário ou e-mail"
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
+                        backgroundColor: '#131b2e',
+                        backgroundImage: 'none',
+                        border: '1px solid #1e293b',
                         borderRadius: '6px',
                         padding: '12px 14px 12px 38px',
                         color: '#ffffff',
@@ -778,7 +775,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     />
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Campo aberto e editável para digitação manual do operador.
+                    Campo aberto e 100% editável para digitação do operador.
                   </div>
                 </div>
 
@@ -806,11 +803,14 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       onChange={(e) => setLoginPassword(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
+                        backgroundColor: '#131b2e',
+                        backgroundImage: 'none',
+                        border: '1px solid #1e293b',
                         borderRadius: '6px',
                         padding: '12px 42px 12px 38px',
                         color: '#ffffff',
@@ -850,8 +850,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 {/* Seleção de Conexão Blockchain */}
                 <div
                   style={{
-                    background: '#222222',
-                    border: '1px solid #2a2a2a',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #1e293b',
                     borderRadius: '8px',
                     padding: '12px 14px',
                     marginBottom: '20px',
@@ -873,8 +873,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="button"
                       onClick={() => setProviderMode('mainnet')}
                       style={{
-                        background: providerMode === 'mainnet' ? '#111111' : '#222222',
-                        border: `1px solid ${providerMode === 'mainnet' ? '#f97316' : '#333333'}`,
+                        background: providerMode === 'mainnet' ? '#1e293b' : 'transparent',
+                        border: `1px solid ${providerMode === 'mainnet' ? '#f97316' : '#1e293b'}`,
                         borderRadius: '6px',
                         padding: '8px 10px',
                         color: providerMode === 'mainnet' ? '#f97316' : '#94a3b8',
@@ -893,8 +893,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       type="button"
                       onClick={() => setProviderMode('local_rpc')}
                       style={{
-                        background: providerMode === 'local_rpc' ? '#111111' : '#222222',
-                        border: `1px solid ${providerMode === 'local_rpc' ? '#38bdf8' : '#333333'}`,
+                        background: providerMode === 'local_rpc' ? '#1e293b' : 'transparent',
+                        border: `1px solid ${providerMode === 'local_rpc' ? '#38bdf8' : '#1e293b'}`,
                         borderRadius: '6px',
                         padding: '8px 10px',
                         color: providerMode === 'local_rpc' ? '#38bdf8' : '#94a3b8',
@@ -918,12 +918,14 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       placeholder="http://127.0.0.1:8332"
                       autoComplete="off"
                       spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       style={{
                         marginTop: '8px',
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#111111',
-                        border: '1px solid #333333',
+                        backgroundColor: '#131b2e',
+                        border: '1px solid #1e293b',
                         borderRadius: '6px',
                         padding: '8px 10px',
                         color: '#f8fafc',
@@ -939,9 +941,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   type="submit"
                   style={{
                     width: '100%',
-                    background: isProcessing
-                      ? '#334155'
-                      : 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                    backgroundColor: isProcessing ? '#334155' : '#f97316',
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '8px',
@@ -954,7 +954,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 12px rgba(234, 88, 12, 0.3)',
+                    boxShadow: 'none',
                   }}
                 >
                   <Lock size={16} />
@@ -970,8 +970,8 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               <form onSubmit={handleRegisterAdminSubmit} autoComplete="off">
                 <div
                   style={{
-                    background: '#222222',
-                    border: '1px solid #2a2a2a',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #1e293b',
                     borderRadius: '8px',
                     padding: '10px 14px',
                     marginBottom: '16px',
@@ -1018,15 +1018,19 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       onChange={(e) => setRegFullName(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
+                        backgroundColor: '#131b2e',
+                        backgroundImage: 'none',
+                        border: '1px solid #1e293b',
                         borderRadius: '6px',
                         padding: '10px 12px',
                         color: '#ffffff',
                         fontSize: '12px',
+                        outline: 'none',
                         fontFamily: "'DM Mono', monospace, sans-serif",
                       }}
                     />
@@ -1054,15 +1058,19 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       onChange={(e) => setRegDocument(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
+                        backgroundColor: '#131b2e',
+                        backgroundImage: 'none',
+                        border: '1px solid #1e293b',
                         borderRadius: '6px',
                         padding: '10px 12px',
                         color: '#ffffff',
                         fontSize: '12px',
+                        outline: 'none',
                         fontFamily: "'DM Mono', monospace, sans-serif",
                       }}
                     />
@@ -1099,15 +1107,19 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       onChange={(e) => setRegEmail(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
+                        backgroundColor: '#131b2e',
+                        backgroundImage: 'none',
+                        border: '1px solid #1e293b',
                         borderRadius: '6px',
                         padding: '10px 12px',
                         color: '#ffffff',
                         fontSize: '12px',
+                        outline: 'none',
                         fontFamily: "'DM Mono', monospace, sans-serif",
                       }}
                     />
@@ -1135,15 +1147,19 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       onChange={(e) => setRegUsername(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      readOnly={false}
+                      disabled={false}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        background: '#222222',
-                        border: '1px solid #333333',
+                        backgroundColor: '#131b2e',
+                        backgroundImage: 'none',
+                        border: '1px solid #1e293b',
                         borderRadius: '6px',
                         padding: '10px 12px',
                         color: '#ffffff',
                         fontSize: '12px',
+                        outline: 'none',
                         fontFamily: "'DM Mono', monospace, sans-serif",
                       }}
                     />
@@ -1181,15 +1197,19 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         onChange={(e) => setRegPassword(e.target.value)}
                         autoComplete="off"
                         spellCheck={false}
+                        readOnly={false}
+                        disabled={false}
                         style={{
                           width: '100%',
                           boxSizing: 'border-box',
-                          background: '#222222',
-                          border: '1px solid #333333',
+                          backgroundColor: '#131b2e',
+                          backgroundImage: 'none',
+                          border: '1px solid #1e293b',
                           borderRadius: '6px',
                           padding: '10px 36px 10px 12px',
                           color: '#ffffff',
                           fontSize: '12px',
+                          outline: 'none',
                           fontFamily: "'DM Mono', monospace, sans-serif",
                         }}
                       />
@@ -1236,15 +1256,19 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                         onChange={(e) => setRegPasswordConfirm(e.target.value)}
                         autoComplete="off"
                         spellCheck={false}
+                        readOnly={false}
+                        disabled={false}
                         style={{
                           width: '100%',
                           boxSizing: 'border-box',
-                          background: '#222222',
-                          border: '1px solid #333333',
+                          backgroundColor: '#131b2e',
+                          backgroundImage: 'none',
+                          border: '1px solid #1e293b',
                           borderRadius: '6px',
                           padding: '10px 36px 10px 12px',
                           color: '#ffffff',
                           fontSize: '12px',
+                          outline: 'none',
                           fontFamily: "'DM Mono', monospace, sans-serif",
                         }}
                       />
@@ -1274,9 +1298,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   type="submit"
                   style={{
                     width: '100%',
-                    background: isProcessing
-                      ? '#334155'
-                      : 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+                    backgroundColor: isProcessing ? '#334155' : '#16a34a',
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '8px',
@@ -1289,7 +1311,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)',
+                    boxShadow: 'none',
                   }}
                 >
                   <UserPlus size={16} />
