@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { securityGuard, SecurityStatus } from '../utils/securityGuard';
 import { persistentVault, GeneralAdminRecord } from '../utils/persistentVault';
+import '../styles/admin.css';
 
 interface SecurityLockOverlayProps {
   status: SecurityStatus;
@@ -655,11 +656,10 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
             </button>
           </div>
 
-          {/* Abas Superiores Dinâmicas (#111111 e #222222 sem pano de fundo) */}
+          {/* Abas Superiores Dinâmicas — Isentas de Pano de Fundo (Zero Background) */}
           <div
+            className="auth-nav-tabs"
             style={{
-              backgroundColor: '#111111',
-              backgroundImage: 'none',
               borderBottom: '1px solid #222222',
               padding: '8px 24px 0 24px',
               display: 'flex',
@@ -668,6 +668,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
           >
             <button
               type="button"
+              className={`auth-nav-tab ${activeTab === 'login' ? 'is-active' : ''}`}
               onClick={() => {
                 setActiveTab('login');
                 setAuthError(null);
@@ -675,12 +676,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               }}
               style={{
                 flex: 1,
-                backgroundColor: activeTab === 'login' ? '#222222' : 'transparent',
-                backgroundImage: 'none',
                 color: activeTab === 'login' ? '#f97316' : '#94a3b8',
                 border: '1px solid',
-                borderColor:
-                  activeTab === 'login' ? '#333333 #333333 #222222 #333333' : 'transparent',
+                borderColor: activeTab === 'login' ? '#333333' : 'transparent',
                 borderBottom: activeTab === 'login' ? '2px solid #f97316' : '1px solid transparent',
                 borderRadius: '8px 8px 0 0',
                 padding: '12px 16px',
@@ -700,6 +698,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
             <button
               type="button"
+              className={`auth-nav-tab ${activeTab === 'register_admin' ? 'is-active' : ''}`}
               onClick={() => {
                 setActiveTab('register_admin');
                 setAuthError(null);
@@ -707,14 +706,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
               }}
               style={{
                 flex: 1,
-                backgroundColor: activeTab === 'register_admin' ? '#222222' : 'transparent',
-                backgroundImage: 'none',
                 color: activeTab === 'register_admin' ? '#f97316' : '#94a3b8',
                 border: '1px solid',
-                borderColor:
-                  activeTab === 'register_admin'
-                    ? '#333333 #333333 #222222 #333333'
-                    : 'transparent',
+                borderColor: activeTab === 'register_admin' ? '#333333' : 'transparent',
                 borderBottom:
                   activeTab === 'register_admin' ? '2px solid #f97316' : '1px solid transparent',
                 borderRadius: '8px 8px 0 0',
@@ -1045,8 +1039,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   </div>
                 </div>
 
-                {/* Sub-Abas do Painel Cadastrar Administrador Geral (Totalmente limpas e sem pano de fundo) */}
+                {/* Sub-Abas do Painel Cadastrar Administrador Geral — Isentas de Pano de Fundo (Zero Background) */}
                 <div
+                  className="auth-sub-tabs"
                   style={{
                     display: 'flex',
                     gap: '8px',
@@ -1057,10 +1052,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                 >
                   <button
                     type="button"
+                    className={`auth-sub-tab ${adminSubTab === 'all' ? 'is-active' : ''}`}
                     onClick={() => setAdminSubTab('all')}
                     style={{
-                      backgroundColor: adminSubTab === 'all' ? '#222222' : 'transparent',
-                      backgroundImage: 'none',
                       color: adminSubTab === 'all' ? '#f97316' : '#94a3b8',
                       border: '1px solid',
                       borderColor: adminSubTab === 'all' ? '#333333' : 'transparent',
@@ -1080,10 +1074,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                   <button
                     type="button"
+                    className={`auth-sub-tab ${adminSubTab === 'personal' ? 'is-active' : ''}`}
                     onClick={() => setAdminSubTab('personal')}
                     style={{
-                      backgroundColor: adminSubTab === 'personal' ? '#222222' : 'transparent',
-                      backgroundImage: 'none',
                       color: adminSubTab === 'personal' ? '#f97316' : '#94a3b8',
                       border: '1px solid',
                       borderColor: adminSubTab === 'personal' ? '#333333' : 'transparent',
@@ -1103,10 +1096,9 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
 
                   <button
                     type="button"
+                    className={`auth-sub-tab ${adminSubTab === 'credentials' ? 'is-active' : ''}`}
                     onClick={() => setAdminSubTab('credentials')}
                     style={{
-                      backgroundColor: adminSubTab === 'credentials' ? '#222222' : 'transparent',
-                      backgroundImage: 'none',
                       color: adminSubTab === 'credentials' ? '#f97316' : '#94a3b8',
                       border: '1px solid',
                       borderColor: adminSubTab === 'credentials' ? '#333333' : 'transparent',
