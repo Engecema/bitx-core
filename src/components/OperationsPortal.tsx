@@ -1525,9 +1525,9 @@ ON CONFLICT (id) DO UPDATE SET
   const [newClientDocument, setNewClientDocument] = useState('');
   const [newClientBitxAddress, setNewClientBitxAddress] = useState('');
   const [selectedTransferRecipientId, setSelectedTransferRecipientId] = useState<string>('auto');
-  const [newClientBtxc, setNewClientBtxc] = useState('0');
-  const [newClientBrl, setNewClientBrl] = useState('0');
-  const [newClientUsdt, setNewClientUsdt] = useState('0');
+  const [newClientBtxc, setNewClientBtxc] = useState('');
+  const [newClientBrl, setNewClientBrl] = useState('');
+  const [newClientUsdt, setNewClientUsdt] = useState('');
   const [newClientStatus, setNewClientStatus] = useState<'Institucional' | 'Verificado KYC' | 'VIP' | 'Ativo'>('Verificado KYC');
   const [clientFormFeedback, setClientFormFeedback] = useState<string>('');
   const [editingClient, setEditingClient] = useState<ExchangeClient | null>(null);
@@ -2554,9 +2554,9 @@ ON CONFLICT (id) DO UPDATE SET
     setNewClientEmail('');
     setNewClientDocument('');
     setNewClientBitxAddress('');
-    setNewClientBtxc('0');
-    setNewClientBrl('0');
-    setNewClientUsdt('0');
+    setNewClientBtxc('');
+    setNewClientBrl('');
+    setNewClientUsdt('');
     setNewClientStatus('Verificado KYC');
   };
 
@@ -5258,16 +5258,16 @@ daemon=1
                     <input
                       type="text"
                       className="portal-input"
-                      placeholder="Nome do operador (ex: Geoni Matos)"
-                      style={{ maxWidth: '240px', flex: '1 1 200px' }}
+                      placeholder=""
+                      style={{ maxWidth: '240px', flex: '1 1 200px', backgroundImage: 'none' }}
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                     />
                     <input
                       type="text"
                       className="portal-input"
-                      placeholder="Email ou usuário (ex: novo@globalexchange.com)"
-                      style={{ maxWidth: '300px', flex: '1 1 240px' }}
+                      placeholder=""
+                      style={{ maxWidth: '300px', flex: '1 1 240px', backgroundImage: 'none' }}
                       value={newUsername}
                       onChange={(e) => setNewUsername(e.target.value)}
                     />
@@ -5581,7 +5581,8 @@ daemon=1
                     <input
                       type="text"
                       className="portal-input portal-mono"
-                      placeholder="Ex: GE-CORP-001 ou GE-CLI-1029"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientId}
                       onChange={(e) => setNewClientId(e.target.value)}
                     />
@@ -5597,7 +5598,8 @@ daemon=1
                     <input
                       type="text"
                       className="portal-input"
-                      placeholder="Ex: Engecema Fomento e Tecnologia Ltda"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientName}
                       onChange={(e) => setNewClientName(e.target.value)}
                       required
@@ -5611,7 +5613,8 @@ daemon=1
                     <input
                       type="email"
                       className="portal-input"
-                      placeholder="Ex: cliente@engecema.com.br"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientEmail}
                       onChange={(e) => setNewClientEmail(e.target.value)}
                       required
@@ -5625,7 +5628,8 @@ daemon=1
                     <input
                       type="text"
                       className="portal-input"
-                      placeholder="Ex: 09.123.456/0001-78 ou CPF"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientDocument}
                       onChange={(e) => setNewClientDocument(e.target.value)}
                     />
@@ -5638,7 +5642,8 @@ daemon=1
                     <input
                       type="text"
                       className="portal-input portal-mono"
-                      placeholder="Ex: btxc1q... ou bxrt1q... (Vazio para gerar automático)"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientBitxAddress}
                       onChange={(e) => setNewClientBitxAddress(e.target.value)}
                     />
@@ -5656,6 +5661,8 @@ daemon=1
                       step="0.0001"
                       min="0"
                       className="portal-input"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientBtxc}
                       onChange={(e) => setNewClientBtxc(e.target.value)}
                     />
@@ -5673,6 +5680,8 @@ daemon=1
                       step="0.01"
                       min="0"
                       className="portal-input"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientBrl}
                       onChange={(e) => setNewClientBrl(e.target.value)}
                     />
@@ -5687,6 +5696,8 @@ daemon=1
                       step="0.01"
                       min="0"
                       className="portal-input"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={newClientUsdt}
                       onChange={(e) => setNewClientUsdt(e.target.value)}
                     />
@@ -6401,7 +6412,8 @@ daemon=1
                     <input
                       type="text"
                       className="portal-input portal-mono"
-                      placeholder="btxc1q... ou cole o endereço do cliente"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={sendTo}
                       onChange={(e) => setSendTo(e.target.value)}
                       required
@@ -6501,7 +6513,8 @@ daemon=1
                       step="0.00000001"
                       min="0.00000001"
                       className="portal-input"
-                      placeholder="0.00000000"
+                      placeholder=""
+                      style={{ backgroundImage: 'none' }}
                       value={sendAmount}
                       onChange={(e) => setSendAmount(e.target.value)}
                       required

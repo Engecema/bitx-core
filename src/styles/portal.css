@@ -406,12 +406,37 @@
   width: 100%;
   padding: 10px 14px;
   background: #1e293b;
+  background-image: none !important;
   border: 1px solid #334155;
   border-radius: 6px;
   color: #f8fafc;
   font-size: 13px;
   outline: none;
+  text-shadow: none !important;
+  box-shadow: none !important;
   transition: border-color 0.15s ease;
+}
+
+.portal-input::placeholder,
+.portal-textarea::placeholder,
+.portal-input::-webkit-input-placeholder,
+.portal-textarea::-webkit-input-placeholder,
+.portal-input::-moz-placeholder,
+.portal-textarea::-moz-placeholder {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+.portal-input:-webkit-autofill,
+.portal-input:-webkit-autofill:hover,
+.portal-input:-webkit-autofill:focus,
+.portal-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  transition: background-color 5000s ease-in-out 0s !important;
 }
 
 .portal-input:focus,
