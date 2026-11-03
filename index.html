@@ -23,17 +23,19 @@
           try {
             var isAuth = sessionStorage.getItem('bitx_admin_session') === 'active' ||
                          sessionStorage.getItem('bitx_admin_auth') === 'true';
-            if (!isAuth) {
-              try { sessionStorage.clear(); } catch (_) {}
-              try { localStorage.clear(); } catch (_) {}
+            var isPublic = window.location.hash === '#site' ||
+                           window.location.hash === '#carteira' ||
+                           window.location.search.indexOf('view=site') !== -1 ||
+                           window.location.search.indexOf('view=carteira') !== -1;
+            if (!isAuth && !isPublic) {
               if (!window.location.pathname.endsWith('login.html')) {
                 window.location.replace("login.html");
               }
             }
           } catch (_) {
-            try { sessionStorage.clear(); } catch (_) {}
-            try { localStorage.clear(); } catch (_) {}
-            window.location.replace("login.html");
+            if (!window.location.pathname.endsWith('login.html')) {
+              window.location.replace("login.html");
+            }
           }
         }
         // Verificação imediata síncrona

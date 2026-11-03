@@ -112,6 +112,28 @@ class PersistentDesktopVault {
         this.syncToOtherLayers(localData);
         return;
       }
+
+      // 4. Se nenhum administrador foi cadastrado, inicializar com o Administrador Oficial da Mainnet (bitx.conf)
+      if (this.memoryVault.administrators.length === 0) {
+        const now = new Date().toISOString();
+        const defaultAdmin: GeneralAdminRecord = {
+          id: 'GX-ADM-0001',
+          name: 'Administrador Geral BitX Core',
+          username: 'bitx_mainnet_admin',
+          email: 'admin@bitxcore.org',
+          document: '00.000.000/0001-00',
+          passwordHash: hashPassword('btxc_prod_sec_auth_2026!'),
+          role: 'Super Admin',
+          status: 'Ativo',
+          createdAt: now,
+          updatedAt: now,
+          vaultFile: '~/.bitx/vault/admin_general.json',
+          checksum: hashPassword(`bitx_mainnet_admin:admin@bitxcore.org:Administrador Geral BitX Core:${now}`),
+        };
+        this.memoryVault.administrators = [defaultAdmin];
+        this.memoryVault.activeOperatorId = defaultAdmin.id;
+        this.syncToOtherLayers(this.memoryVault);
+      }
     } catch (e) {
       console.warn('[BitX Vault] Aviso na inicialização do cofre desktop:', e);
     } finally {

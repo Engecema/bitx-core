@@ -8,11 +8,13 @@ if (typeof window !== 'undefined') {
     sessionStorage.getItem('bitx_admin_session') === 'active' ||
     sessionStorage.getItem('bitx_admin_auth') === 'true';
 
-  if (!isAuth && !window.location.pathname.endsWith('login.html')) {
-    try {
-      sessionStorage.clear();
-      localStorage.clear();
-    } catch (_) {}
+  const isPublic =
+    window.location.hash === '#site' ||
+    window.location.hash === '#carteira' ||
+    window.location.search.includes('view=site') ||
+    window.location.search.includes('view=carteira');
+
+  if (!isAuth && !isPublic && !window.location.pathname.endsWith('login.html')) {
     window.location.replace('login.html');
   }
 }

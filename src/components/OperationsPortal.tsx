@@ -11,10 +11,6 @@ if (typeof window !== 'undefined') {
     sessionStorage.getItem('bitx_admin_auth') === 'true';
 
   if (!isAuth && !window.location.pathname.endsWith('login.html')) {
-    try {
-      sessionStorage.clear();
-      localStorage.clear();
-    } catch (_) {}
     window.location.replace('login.html');
   }
 }

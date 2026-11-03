@@ -348,13 +348,15 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Abas Principais (Totalmente limpas, sem imagens de fundo) */}
+        {/* Abas Principais (Totalmente limpas, sem pano de fundo) */}
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             borderBottom: '1px solid #1e293b',
-            background: '#090f1b',
+            background: 'transparent',
+            backgroundColor: 'transparent',
+            backgroundImage: 'none',
           }}
         >
           <button
@@ -367,7 +369,9 @@ export const LoginPage: React.FC = () => {
               padding: '12px 16px',
               border: 'none',
               borderBottom: activeTab === 'login' ? '2px solid #f97316' : '2px solid transparent',
-              background: activeTab === 'login' ? '#0c1322' : 'transparent',
+              background: 'transparent',
+              backgroundColor: 'transparent',
+              backgroundImage: 'none',
               color: activeTab === 'login' ? '#f8fafc' : '#94a3b8',
               fontSize: '13px',
               fontWeight: 700,
@@ -393,7 +397,9 @@ export const LoginPage: React.FC = () => {
               padding: '12px 16px',
               border: 'none',
               borderBottom: activeTab === 'register_admin' ? '2px solid #10b981' : '2px solid transparent',
-              background: activeTab === 'register_admin' ? '#0c1322' : 'transparent',
+              background: 'transparent',
+              backgroundColor: 'transparent',
+              backgroundImage: 'none',
               color: activeTab === 'register_admin' ? '#f8fafc' : '#94a3b8',
               fontSize: '13px',
               fontWeight: 700,
@@ -451,9 +457,9 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
-        {/* Corpo: Aba de Login */}
+        {/* Corpo: Aba de Login (Acessar Painel) */}
         {activeTab === 'login' && (
-          <form onSubmit={handleLoginSubmit} style={{ padding: '24px' }}>
+          <form onSubmit={handleLoginSubmit} style={{ padding: '24px', background: 'transparent' }}>
             <div style={{ marginBottom: '18px' }}>
               <label
                 style={{
@@ -462,68 +468,71 @@ export const LoginPage: React.FC = () => {
                   fontWeight: 600,
                   color: '#cbd5e1',
                   marginBottom: '6px',
+                  background: 'transparent',
                 }}
               >
                 E-mail ou Usuário Administrador:
               </label>
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', background: 'transparent' }}>
                 <input
                   type="text"
                   value={loginUser}
                   onChange={(e) => setLoginUser(e.target.value)}
                   autoComplete="off"
+                  placeholder=""
                   required
+                  className="auth-input-clean"
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '10px 12px 10px 38px',
+                    padding: '10px 14px',
                     borderRadius: '6px',
                     border: '1px solid #334155',
-                    background: '#090f1b',
+                    background: 'transparent',
+                    backgroundColor: 'transparent',
+                    backgroundImage: 'none',
                     color: '#f8fafc',
                     fontSize: '14px',
                     outline: 'none',
                     fontFamily: 'inherit',
+                    textShadow: 'none',
+                    boxShadow: 'none',
                   }}
-                />
-                <User
-                  size={16}
-                  color="#64748b"
-                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
                 />
               </div>
             </div>
 
             <div style={{ marginBottom: '22px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', background: 'transparent' }}>
                   Senha de Acesso:
                 </label>
               </div>
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', background: 'transparent' }}>
                 <input
                   type={showLoginPass ? 'text' : 'password'}
                   value={loginPass}
                   onChange={(e) => setLoginPass(e.target.value)}
                   autoComplete="new-password"
+                  placeholder=""
                   required
+                  className="auth-input-clean"
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '10px 40px 10px 38px',
+                    padding: '10px 42px 10px 14px',
                     borderRadius: '6px',
                     border: '1px solid #334155',
-                    background: '#090f1b',
+                    background: 'transparent',
+                    backgroundColor: 'transparent',
+                    backgroundImage: 'none',
                     color: '#f8fafc',
                     fontSize: '14px',
                     outline: 'none',
                     fontFamily: 'inherit',
+                    textShadow: 'none',
+                    boxShadow: 'none',
                   }}
-                />
-                <Key
-                  size={16}
-                  color="#64748b"
-                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
                 />
                 <button
                   type="button"

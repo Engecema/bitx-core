@@ -15,20 +15,11 @@ if (typeof window !== 'undefined') {
         sessionStorage.getItem('bitx_admin_auth') === 'true';
 
       if (!isAuth) {
-        try {
-          sessionStorage.clear();
-          localStorage.clear();
-        } catch (_) {}
-
         if (!window.location.pathname.endsWith('login.html')) {
           window.location.replace('login.html');
         }
       }
     } catch (_) {
-      try {
-        sessionStorage.clear();
-        localStorage.clear();
-      } catch (_) {}
       if (!window.location.pathname.endsWith('login.html')) {
         window.location.replace('login.html');
       }
@@ -363,11 +354,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <input
                     type="text"
                     id="username"
-                    placeholder="Digite seu usuário ou e-mail"
+                    placeholder=""
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     autoComplete="off"
-                    style={{ backgroundImage: 'none' }}
+                    className="auth-input-clean"
+                    style={{
+                      background: 'transparent',
+                      backgroundColor: 'transparent',
+                      backgroundImage: 'none',
+                      textShadow: 'none',
+                      boxShadow: 'none',
+                    }}
                     required
                   />
                 </div>
@@ -377,11 +375,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <input
                       type={showPassword ? 'text' : 'password'}
                       id="password"
-                      placeholder="Digite sua senha"
+                      placeholder=""
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       autoComplete="off"
-                      style={{ backgroundImage: 'none' }}
+                      className="auth-input-clean"
+                      style={{
+                        background: 'transparent',
+                        backgroundColor: 'transparent',
+                        backgroundImage: 'none',
+                        textShadow: 'none',
+                        boxShadow: 'none',
+                      }}
                       required
                     />
                     <button

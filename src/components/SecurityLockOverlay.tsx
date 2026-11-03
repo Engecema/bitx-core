@@ -743,7 +743,7 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                   >
                     Usuário ou E-mail Cadastrado
                   </label>
-                  <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative', background: 'transparent' }}>
                     <input
                       type="email"
                       id="login-email"
@@ -751,24 +751,24 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       onChange={(e) => setLoginUsername(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      placeholder=""
+                      className="auth-input-clean"
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        backgroundColor: '#222222',
-                        backgroundImage: 'none', // Sem pano de fundo
+                        background: 'transparent',
+                        backgroundColor: 'transparent',
+                        backgroundImage: 'none',
                         border: '1px solid #333333',
                         borderRadius: '6px',
-                        padding: '12px 14px 12px 38px',
+                        padding: '12px 14px',
                         color: '#ffffff',
                         fontSize: '13px',
                         outline: 'none',
                         fontFamily: "'DM Mono', monospace, sans-serif",
+                        textShadow: 'none',
+                        boxShadow: 'none',
                       }}
-                    />
-                    <User
-                      size={16}
-                      color="#94a3b8"
-                      style={{ position: 'absolute', left: '12px', top: '13px' }}
                     />
                   </div>
                 </div>
@@ -784,11 +784,12 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       marginBottom: '6px',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5px',
+                      background: 'transparent',
                     }}
                   >
                     Senha de Acesso
                   </label>
-                  <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative', background: 'transparent' }}>
                     <input
                       type={showLoginPassword ? 'text' : 'password'}
                       id="login-password"
@@ -796,24 +797,24 @@ export const SecurityLockOverlay: React.FC<SecurityLockOverlayProps> = ({
                       onChange={(e) => setLoginPassword(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
+                      placeholder=""
+                      className="auth-input-clean"
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        backgroundColor: '#222222',
-                        backgroundImage: 'none', // Sem pano de fundo
+                        background: 'transparent',
+                        backgroundColor: 'transparent',
+                        backgroundImage: 'none',
                         border: '1px solid #333333',
                         borderRadius: '6px',
-                        padding: '12px 42px 12px 38px',
+                        padding: '12px 42px 12px 14px',
                         color: '#ffffff',
                         fontSize: '13px',
                         outline: 'none',
                         fontFamily: "'DM Mono', monospace, sans-serif",
+                        textShadow: 'none',
+                        boxShadow: 'none',
                       }}
-                    />
-                    <KeyRound
-                      size={16}
-                      color="#94a3b8"
-                      style={{ position: 'absolute', left: '12px', top: '13px' }}
                     />
                     <button
                       type="button"

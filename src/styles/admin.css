@@ -340,3 +340,49 @@
   background-image: none !important;
 }
 
+/* ==========================================================================
+   Remoção total de pano de fundo para todos os caracteres e placeholders
+   ========================================================================== */
+.admin-theme input,
+.auth-input-clean,
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  background-image: none !important;
+  text-shadow: none !important;
+}
+
+/* Remoção total de pano de fundo dos placeholders */
+input::placeholder,
+input::-webkit-input-placeholder,
+input::-moz-placeholder,
+input:-ms-input-placeholder {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  color: transparent !important; /* Limpa visualmente caracteres de placeholder se houver */
+}
+
+/* Evitar que autofill do navegador adicione qualquer pano de fundo aos caracteres */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0px 1000px #0c1322 inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Remoção de pano de fundo da seleção de texto dos campos de entrada */
+input::selection {
+  background: rgba(249, 115, 22, 0.3) !important;
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
