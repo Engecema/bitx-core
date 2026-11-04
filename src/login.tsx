@@ -16,8 +16,19 @@ import {
   FileText,
   BadgeCheck,
 } from 'lucide-react';
-import { persistentVault } from './utils/persistentVault';
+import { persistentVault, hashPassword } from './utils/persistentVault';
 import './styles/admin.css';
+
+// Utilitários de Segurança e Sanitização contra Injeção e XSS
+const sanitizeInput = (val: string): string => {
+  if (!val) return '';
+  return val.replace(/[<>"'/`]/g, '').trim();
+};
+
+const USERNAME_REGEX = /^[a-zA-Z0-9_.-]{3,32}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 60000; // 60 segundos de bloqueio
 
 // Proteção BFCache e Route Guard da Página de Login
 if (typeof window !== 'undefined') {
@@ -67,10 +78,46 @@ export const LoginPage: React.FC = () => {
   const [showRegPass, setShowRegPass] = useState(false);
   const [showRegConfirm, setShowRegConfirm] = useState(false);
 
+  // Campo de Autorização Mestre quando já existe admin registrado (Proteção BOLA/IDOR)
+  const [currentAdminAuthPass, setCurrentAdminAuthPass] = useState('');
+  const [showCurrentAdminPass, setShowCurrentAdminPass] = useState(false);
+
+  // Estados de Rate Limiting e Lockout por Força Bruta
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    try {
+      return parseInt(sessionStorage.getItem('bitx_sec_fails') || '0', 10);
+    } catch {
+      return 0;
+    }
+  });
+  const [lockoutUntil, setLockoutUntil] = useState<number>(() => {
+    try {
+      return parseInt(sessionStorage.getItem('bitx_sec_lockout') || '0', 10);
+    } catch {
+      return 0;
+    }
+  });
+  const [lockoutRemaining, setLockoutRemaining] = useState<number>(0);
+
   // Estados de erro, sucesso e carregamento
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Efeito de contagem regressiva para Lockout
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = Date.now();
+      if (lockoutUntil > now) {
+        setLockoutRemaining(Math.ceil((lockoutUntil - now) / 1000));
+      } else {
+        setLockoutRemaining(0);
+      }
+    };
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutUntil]);
 
   useEffect(() => {
     persistentVault.ready().then(() => {
@@ -88,7 +135,16 @@ export const LoginPage: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const u = loginUser.trim();
+    // 1. Verificação de Trava contra Força Bruta (Rate Limiting)
+    const now = Date.now();
+    if (lockoutUntil > now) {
+      const remainingSecs = Math.ceil((lockoutUntil - now) / 1000);
+      setErrorMsg(`Acesso suspenso por segurança devido ao excesso de tentativas. Aguarde ${remainingSecs}s.`);
+      return;
+    }
+
+    // 2. Sanitização estrita contra XSS e injeção
+    const u = sanitizeInput(loginUser);
     const p = loginPass;
 
     if (!u) {
@@ -101,10 +157,19 @@ export const LoginPage: React.FC = () => {
     }
 
     setIsSubmitting(true);
+    // Delay computacional proposital (400ms) para amortecer ataques de timing e automação
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
     try {
       // 1. Validar contra o cofre desktop do Administrador Geral
       const vaultRes = await persistentVault.validateAdminLogin(u, p);
       if (vaultRes.valid) {
+        // Sucesso: zerar contadores de Rate Limiting
+        sessionStorage.removeItem('bitx_sec_fails');
+        sessionStorage.removeItem('bitx_sec_lockout');
+        setFailedAttempts(0);
+        setLockoutUntil(0);
+
         setSuccessMsg('Autenticação autorizada! Redirecionando para o painel...');
         sessionStorage.setItem('bitx_admin_session', 'active');
         sessionStorage.setItem('bitx_admin_auth', 'true');
@@ -116,6 +181,7 @@ export const LoginPage: React.FC = () => {
             username: u,
             role: 'Super Admin',
             authenticatedAt: new Date().toISOString(),
+            sessionNonce: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
           })
         );
 
@@ -125,14 +191,28 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // 2. Validar contra usuários locais
+      // 2. Validar contra usuários locais de contingência com hash SHA-256
       let localUsers: Record<string, string> = {};
       try {
         const stored = localStorage.getItem('bitx_users');
         if (stored) localUsers = JSON.parse(stored);
       } catch (_) {}
 
-      if (localUsers[u] && localUsers[u] === p) {
+      const inputHash = hashPassword(p);
+      if (localUsers[u] && (localUsers[u] === inputHash || localUsers[u] === p)) {
+        // Se ainda estiver com texto legado, atualiza para hash SHA-256 seguro
+        if (localUsers[u] === p) {
+          localUsers[u] = inputHash;
+          try {
+            localStorage.setItem('bitx_users', JSON.stringify(localUsers));
+          } catch (_) {}
+        }
+
+        sessionStorage.removeItem('bitx_sec_fails');
+        sessionStorage.removeItem('bitx_sec_lockout');
+        setFailedAttempts(0);
+        setLockoutUntil(0);
+
         setSuccessMsg('Autenticação autorizada! Redirecionando para o painel...');
         sessionStorage.setItem('bitx_admin_session', 'active');
         sessionStorage.setItem('bitx_admin_auth', 'true');
@@ -144,6 +224,7 @@ export const LoginPage: React.FC = () => {
             username: u,
             role: 'Super Admin',
             authenticatedAt: new Date().toISOString(),
+            sessionNonce: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
           })
         );
 
@@ -153,7 +234,21 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      setErrorMsg(vaultRes.reason || 'Credenciais inválidas. Verifique os dados digitados.');
+      // Falha de login: aciona Rate Limiting progressivo
+      const newFails = failedAttempts + 1;
+      setFailedAttempts(newFails);
+      sessionStorage.setItem('bitx_sec_fails', String(newFails));
+
+      if (newFails >= MAX_FAILED_ATTEMPTS) {
+        const lock = Date.now() + LOCKOUT_DURATION_MS;
+        setLockoutUntil(lock);
+        sessionStorage.setItem('bitx_sec_lockout', String(lock));
+        setErrorMsg(`Limite de ${MAX_FAILED_ATTEMPTS} tentativas consecutivas excedido. Acesso suspenso por 60 segundos.`);
+      } else {
+        setErrorMsg(
+          `${vaultRes.reason || 'Credenciais inválidas. Verifique os dados digitados.'} (${MAX_FAILED_ATTEMPTS - newFails} tentativas restantes)`
+        );
+      }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Falha na validação de credenciais.');
     } finally {
@@ -166,37 +261,59 @@ export const LoginPage: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const name = regName.trim();
-    const doc = regDoc.trim();
-    const email = regEmail.trim();
-    const username = regUsername.trim();
+    // Sanitização rigorosa contra XSS
+    const name = sanitizeInput(regName);
+    const doc = sanitizeInput(regDoc);
+    const email = regEmail.trim().toLowerCase();
+    const username = sanitizeInput(regUsername).toLowerCase();
     const password = regPass;
     const confirm = regPassConfirm;
 
-    if (!name) {
+    if (!name || name.length < 3) {
       setSubTab('personal');
-      setErrorMsg('Informe o nome completo do Administrador Geral.');
+      setErrorMsg('Informe o nome completo do Administrador Geral (mínimo 3 caracteres).');
       return;
     }
-    if (!email || !email.includes('@')) {
+    if (!EMAIL_REGEX.test(email)) {
       setSubTab('personal');
       setErrorMsg('Informe um endereço de e-mail institucional válido.');
       return;
     }
-    if (!username) {
+    if (!USERNAME_REGEX.test(username)) {
       setSubTab('credentials');
-      setErrorMsg('Defina o nome de usuário do Administrador Geral.');
+      setErrorMsg('O nome de usuário deve conter de 3 a 32 caracteres alfanuméricos (letras, números, . ou _).');
       return;
     }
-    if (!password || password.length < 4) {
+    if (!password || password.length < 8) {
       setSubTab('credentials');
-      setErrorMsg('A senha mestre deve conter no mínimo 4 caracteres.');
+      setErrorMsg('A senha mestre deve conter no mínimo 8 caracteres para proteção criptográfica.');
       return;
     }
     if (password !== confirm) {
       setSubTab('credentials');
       setErrorMsg('As senhas digitadas não coincidem.');
       return;
+    }
+
+    // TRAVA DE AUTORIZAÇÃO (BOLA/IDOR): Se já houver admin registrado no cofre
+    const hasAdmin = vaultMeta.adminCount > 0;
+    const isCurrentAdminLogged = sessionStorage.getItem('bitx_admin_session') === 'active';
+
+    if (hasAdmin && !isCurrentAdminLogged) {
+      if (!currentAdminAuthPass) {
+        setErrorMsg('Autorização obrigatória: Um Administrador Geral já está cadastrado. Informe a Senha do Administrador Atual para autorizar este cadastro.');
+        return;
+      }
+      // Validar senha do administrador atual no cofre
+      const activeAdmin = persistentVault.getGeneralAdmin();
+      const authValidation = await persistentVault.validateAdminLogin(
+        activeAdmin?.username || 'bitx_mainnet_admin',
+        currentAdminAuthPass
+      );
+      if (!authValidation.valid) {
+        setErrorMsg('Autorização negada: Senha do Administrador Atual incorreta.');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -209,15 +326,18 @@ export const LoginPage: React.FC = () => {
         password,
       });
 
-      // Salva no registro de usuários para compatibilidade
+      // Salva no registro de usuários apenas o hash SHA-256 (NUNCA senha em texto puro)
       try {
         const stored = localStorage.getItem('bitx_users');
         const current = stored ? JSON.parse(stored) : {};
-        current[username] = password;
+        current[username] = hashPassword(password);
         localStorage.setItem('bitx_users', JSON.stringify(current));
       } catch (_) {}
 
-      setSuccessMsg('Administrador Geral registrado com sucesso! Inicializando sessão...');
+      // Atualiza metadados do cofre
+      setVaultMeta(persistentVault.getVaultMetadata());
+
+      setSuccessMsg('Administrador Geral registrado com segurança! Inicializando sessão...');
       sessionStorage.setItem('bitx_admin_session', 'active');
       sessionStorage.setItem('bitx_admin_auth', 'true');
       sessionStorage.setItem('bitx_admin_user', username);
@@ -228,6 +348,7 @@ export const LoginPage: React.FC = () => {
           username,
           role: 'Super Admin',
           authenticatedAt: new Date().toISOString(),
+          sessionNonce: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
         })
       );
 
@@ -364,6 +485,7 @@ export const LoginPage: React.FC = () => {
             onClick={() => {
               setActiveTab('login');
               setErrorMsg(null);
+              setSuccessMsg(null);
             }}
             style={{
               padding: '12px 16px',
@@ -392,6 +514,7 @@ export const LoginPage: React.FC = () => {
             onClick={() => {
               setActiveTab('register_admin');
               setErrorMsg(null);
+              setSuccessMsg(null);
             }}
             style={{
               padding: '12px 16px',
@@ -556,27 +679,38 @@ export const LoginPage: React.FC = () => {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || lockoutRemaining > 0}
               style={{
                 width: '100%',
                 padding: '12px',
                 borderRadius: '6px',
                 border: 'none',
-                background: '#f97316',
+                background: lockoutRemaining > 0 ? '#475569' : '#f97316',
                 color: '#fff',
                 fontSize: '14px',
                 fontWeight: 700,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                cursor: isSubmitting || lockoutRemaining > 0 ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
+                boxShadow: lockoutRemaining > 0 ? 'none' : '0 4px 14px rgba(249, 115, 22, 0.35)',
                 transition: 'all 0.15s ease',
               }}
             >
-              <span>{isSubmitting ? 'Verificando credenciais...' : 'Acessar Painel BitX Core'}</span>
-              <ArrowRight size={16} />
+              {lockoutRemaining > 0 ? (
+                <>
+                  <Lock size={16} />
+                  <span>Acesso Suspenso por Força Bruta ({lockoutRemaining}s)</span>
+                </>
+              ) : isSubmitting ? (
+                <span>Verificando credenciais com segurança...</span>
+              ) : (
+                <>
+                  <span>Acessar Painel BitX Core</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
             </button>
 
             {/* Link para cadastro se cofre vazio */}
@@ -753,6 +887,66 @@ export const LoginPage: React.FC = () => {
             {/* Seção 2: Credenciais */}
             {(subTab === 'all' || subTab === 'credentials') && (
               <div style={{ marginBottom: '18px' }}>
+                {/* Trava de Autorização contra Quebra de Acesso (IDOR/BOLA) */}
+                {vaultMeta.adminCount > 0 && typeof window !== 'undefined' && sessionStorage.getItem('bitx_admin_session') !== 'active' && (
+                  <div
+                    style={{
+                      marginBottom: '16px',
+                      padding: '12px 14px',
+                      borderRadius: '6px',
+                      background: 'rgba(234, 179, 8, 0.08)',
+                      border: '1px solid rgba(234, 179, 8, 0.35)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <Shield size={15} color="#eab308" />
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#fef08a' }}>
+                        Autorização Mestre Obrigatória
+                      </span>
+                    </div>
+                    <p style={{ margin: '0 0 8px', fontSize: '11px', color: '#fef9c3', lineHeight: 1.4 }}>
+                      Já existe um Administrador Geral cadastrado. Para registrar ou transferir a titularidade, informe a Senha Mestre Atual:
+                    </p>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showCurrentAdminPass ? 'text' : 'password'}
+                        value={currentAdminAuthPass}
+                        onChange={(e) => setCurrentAdminAuthPass(e.target.value)}
+                        autoComplete="current-password"
+                        placeholder="Digite a Senha Mestre do Administrador Atual"
+                        required
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '8px 34px 8px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid #eab308',
+                          background: '#090f1b',
+                          color: '#f8fafc',
+                          fontSize: '13px',
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentAdminPass(!showCurrentAdminPass)}
+                        style={{
+                          position: 'absolute',
+                          right: '8px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: '#eab308',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {showCurrentAdminPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ marginBottom: '14px' }}>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '4px' }}>
                     Nome de Usuário (Login):

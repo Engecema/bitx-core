@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/admin.css';
-import { persistentVault } from '../utils/persistentVault';
+import { persistentVault, hashPassword } from '../utils/persistentVault';
 
 // ============================================================================
 // BITX CORE — ROUTE GUARD & VALIDAÇÃO RÍGIDA DE SESSÃO DO ADMINISTRADOR
@@ -143,9 +143,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, [isAuthenticated]);
 
+  // Estados de proteção Rate Limiting e Lockout contra Força Bruta
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    try {
+      return parseInt(sessionStorage.getItem('bitx_admin_fails') || '0', 10);
+    } catch {
+      return 0;
+    }
+  });
+  const [lockoutUntil, setLockoutUntil] = useState<number>(() => {
+    try {
+      return parseInt(sessionStorage.getItem('bitx_admin_lockout') || '0', 10);
+    } catch {
+      return 0;
+    }
+  });
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState<boolean>(false);
+  const [isTransferring, setIsTransferring] = useState<boolean>(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const u = username.trim();
+    const now = Date.now();
+    if (lockoutUntil > now) {
+      const remaining = Math.ceil((lockoutUntil - now) / 1000);
+      setErrorMessage(`Acesso suspenso por segurança devido ao excesso de tentativas. Aguarde ${remaining}s.`);
+      return;
+    }
+
+    const u = username.replace(/[<>"'/`]/g, '').trim();
     const p = password;
 
     if (!u || !p) {
@@ -153,28 +178,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
-    // 1. Validar contra o Cofre Desktop do Administrador Geral
-    const vaultRes = await persistentVault.validateAdminLogin(u, p);
-    if (vaultRes.valid) {
-      setErrorMessage('');
-      sessionStorage.setItem('bitx_admin_session', 'active');
-      sessionStorage.setItem('bitx_admin_auth', 'true');
-      sessionStorage.setItem('bitx_admin_user', u);
-      setIsAuthenticated(true);
-      return;
-    }
+    setIsSubmittingLogin(true);
+    // Delay de 400ms para neutralizar timing attacks e bots de automação
+    await new Promise((r) => setTimeout(r, 400));
 
-    // 2. Validar contra usuários locais cadastrados
-    if (users[u] && users[u] === p) {
-      setErrorMessage('');
-      sessionStorage.setItem('bitx_admin_session', 'active');
-      sessionStorage.setItem('bitx_admin_auth', 'true');
-      sessionStorage.setItem('bitx_admin_user', u);
-      setIsAuthenticated(true);
-      return;
-    }
+    try {
+      // 1. Validar contra o Cofre Desktop do Administrador Geral
+      const vaultRes = await persistentVault.validateAdminLogin(u, p);
+      if (vaultRes.valid) {
+        sessionStorage.removeItem('bitx_admin_fails');
+        sessionStorage.removeItem('bitx_admin_lockout');
+        setFailedAttempts(0);
+        setLockoutUntil(0);
+        setErrorMessage('');
+        sessionStorage.setItem('bitx_admin_session', 'active');
+        sessionStorage.setItem('bitx_admin_auth', 'true');
+        sessionStorage.setItem('bitx_admin_user', u);
+        setIsAuthenticated(true);
+        return;
+      }
 
-    setErrorMessage(vaultRes.reason || 'Usuário ou senha incorretos.');
+      // 2. Validar contra usuários locais cadastrados (com hash SHA-256)
+      const inputHash = hashPassword(p);
+      if (users[u] && (users[u] === inputHash || users[u] === p)) {
+        if (users[u] === p) {
+          const updated = { ...users, [u]: inputHash };
+          setUsers(updated);
+          try {
+            localStorage.setItem('bitx_users', JSON.stringify(updated));
+          } catch {}
+        }
+        sessionStorage.removeItem('bitx_admin_fails');
+        sessionStorage.removeItem('bitx_admin_lockout');
+        setFailedAttempts(0);
+        setLockoutUntil(0);
+        setErrorMessage('');
+        sessionStorage.setItem('bitx_admin_session', 'active');
+        sessionStorage.setItem('bitx_admin_auth', 'true');
+        sessionStorage.setItem('bitx_admin_user', u);
+        setIsAuthenticated(true);
+        return;
+      }
+
+      const nextFails = failedAttempts + 1;
+      setFailedAttempts(nextFails);
+      sessionStorage.setItem('bitx_admin_fails', String(nextFails));
+      if (nextFails >= 5) {
+        const lock = Date.now() + 60000;
+        setLockoutUntil(lock);
+        sessionStorage.setItem('bitx_admin_lockout', String(lock));
+        setErrorMessage('Limite de 5 tentativas consecutivas excedido. Acesso suspenso por 60 segundos.');
+      } else {
+        setErrorMessage(`${vaultRes.reason || 'Usuário ou senha incorretos.'} (${5 - nextFails} tentativas restantes)`);
+      }
+    } finally {
+      setIsSubmittingLogin(false);
+    }
   };
 
   const handleLogout = () => {
@@ -190,15 +249,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleSendTransfer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!txTo.trim() || !txAmount) return;
+    if (isTransferring) return;
+
+    const cleanTo = txTo.replace(/[<>"'/`]/g, '').trim();
+    if (!cleanTo || cleanTo.length < 4) {
+      setTxAlert({
+        visible: true,
+        message: 'Endereço ou destinatário inválido.',
+        success: false,
+      });
+      return;
+    }
 
     const amountNum = parseFloat(txAmount);
-    if (isNaN(amountNum) || amountNum <= 0) return;
+    if (isNaN(amountNum) || amountNum <= 0 || !isFinite(amountNum)) {
+      setTxAlert({
+        visible: true,
+        message: 'Valor de transferência inválido.',
+        success: false,
+      });
+      return;
+    }
 
-    const txid = 'tx_' + Math.random().toString(16).substring(2, 10);
+    setIsTransferring(true);
+    const txid = 'tx_' + Array.from(crypto.getRandomValues(new Uint8Array(8))).map((b) => b.toString(16).padStart(2, '0')).join('');
     setTxAlert({
       visible: true,
-      message: `Transferência Concluída! ID: ${txid}`,
+      message: `Transferência Concluída com Sucesso! ID: ${txid}`,
       success: true,
     });
 
@@ -206,22 +283,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {
         txid,
         amount: amountNum,
-        to: txTo.trim(),
+        to: cleanTo,
       },
       ...prev,
     ]);
 
     setTxTo('');
     setTxAmount('');
+    setTimeout(() => setIsTransferring(false), 500);
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    const u = newUser.trim();
+    const u = newUser.replace(/[<>"'/`]/g, '').trim().toLowerCase();
     const p = newPass;
-    if (!u || !p) return;
+    if (!u || u.length < 3) {
+      setErrorMessage('O nome de usuário deve conter pelo menos 3 caracteres alfanuméricos.');
+      return;
+    }
+    if (!p || p.length < 8) {
+      setErrorMessage('A senha deve conter no mínimo 8 caracteres para proteção criptográfica.');
+      return;
+    }
 
-    const updated = { ...users, [u]: p };
+    // NUNCA armazenar senha em texto plano: salvar hash SHA-256
+    const hashed = hashPassword(p);
+    const updated = { ...users, [u]: hashed };
     setUsers(updated);
     try {
       localStorage.setItem('bitx_users', JSON.stringify(updated));
@@ -238,8 +325,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleDeleteUser = (u: string) => {
+    const cleanUser = u.replace(/[<>"'/`]/g, '').trim();
+    if (!window.confirm(`Confirma a exclusão definitiva do usuário "${cleanUser}"?`)) return;
+
     const updated = { ...users };
-    delete updated[u];
+    delete updated[cleanUser];
     setUsers(updated);
     try {
       localStorage.setItem('bitx_users', JSON.stringify(updated));

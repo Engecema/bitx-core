@@ -5192,14 +5192,20 @@ daemon=1
                         className="portal-btn portal-btn-primary"
                         onClick={() => {
                           if (!editingOperator.username.trim()) return;
+                          const cleanOperator: OperatorUser = {
+                            ...editingOperator,
+                            name: editingOperator.name.replace(/[<>"'/`]/g, '').trim(),
+                            email: editingOperator.email.replace(/[<>"'/`]/g, '').trim(),
+                            username: editingOperator.username.replace(/[<>"'/`]/g, '').trim(),
+                          };
                           const updated = users.map((op) =>
-                            op.id === editingOperator.id || op.username === editingOperator.username
-                              ? editingOperator
+                            op.id === cleanOperator.id || op.username === cleanOperator.username
+                              ? cleanOperator
                               : op
                           );
-                          updateOperatorsAndPersist(updated, `Operador ${editingOperator.username} atualizado com sucesso!`);
+                          updateOperatorsAndPersist(updated, `Operador ${cleanOperator.username} atualizado com sucesso!`);
                           notifyCloudOperators(updated);
-                          addLog(`[Acessos] Operador ${editingOperator.username} atualizado com sucesso.`, 'info');
+                          addLog(`[Acessos] Operador ${cleanOperator.username} atualizado com sucesso.`, 'info');
                           setEditingOperator(null);
                         }}
                       >
@@ -5252,18 +5258,23 @@ daemon=1
                       type="button"
                       className="portal-btn portal-btn-primary"
                       onClick={() => {
-                        const targetUser = newUsername.trim();
-                        if (!targetUser) return;
-                        if (users.some((x) => x.username.toLowerCase() === targetUser.toLowerCase() || x.email.toLowerCase() === targetUser.toLowerCase())) {
+                        const targetUser = newUsername.replace(/[<>"'/`]/g, '').trim().toLowerCase();
+                        const targetName = newName.replace(/[<>"'/`]/g, '').trim();
+                        if (!targetUser || targetUser.length < 3) {
+                          setOperatorFeedback('O identificador deve conter ao menos 3 caracteres alfanuméricos.');
+                          setTimeout(() => setOperatorFeedback(''), 4000);
+                          return;
+                        }
+                        if (users.some((x) => x.username.toLowerCase() === targetUser || x.email.toLowerCase() === targetUser)) {
                           setOperatorFeedback('Este operador ou email já está cadastrado na lista.');
                           setTimeout(() => setOperatorFeedback(''), 4000);
                           return;
                         }
                         const newOp: OperatorUser = {
                           id: `GX-OP-${Date.now().toString(36).toUpperCase()}`,
-                          name: newName.trim() || targetUser,
+                          name: targetName || targetUser,
                           username: targetUser,
-                          email: targetUser,
+                          email: targetUser.includes('@') ? targetUser : `${targetUser}@globalexchange.corp`,
                           role: newRole,
                           status: 'Ativo',
                           createdAt: new Date().toLocaleDateString('pt-BR'),
