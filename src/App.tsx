@@ -132,12 +132,13 @@ export function App() {
             type="button"
             onClick={() => {
               try {
+                securityGuard.purgeSensitiveStorage();
                 sessionStorage.clear();
                 localStorage.clear();
               } catch (_) {}
               window.location.replace('login.html');
             }}
-            title="Encerrar sessão de administrador, limpar armazenamento e redirecionar para login.html"
+            title="Encerrar sessão de administrador com Zero-State Purge criptográfico e redirecionar para login.html"
             style={{
               background: '#7f1d1d',
               color: '#fecaca',

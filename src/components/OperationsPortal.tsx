@@ -3377,39 +3377,6 @@ daemon=1
           <div className="portal-metric-pill" style={{ borderColor: '#10b981' }}>
             Supabase Cloud: <strong style={{ color: '#10b981' }}>● Conectado (odbbtgkxgiqlfhcepwuj)</strong>
           </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              try {
-                sessionStorage.clear();
-                localStorage.clear();
-              } catch (_) {}
-              window.location.replace('login.html');
-            }}
-            title="Encerrar sessão de administrador, limpar armazenamento e redirecionar para login.html"
-            style={{
-              background: '#991b1b',
-              color: '#fee2e2',
-              border: '1px solid #ef4444',
-              borderRadius: '6px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginLeft: 'auto',
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-            Sair
-          </button>
         </div>
       </header>
 
