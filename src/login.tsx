@@ -913,7 +913,7 @@ export const LoginPage: React.FC = () => {
                         value={currentAdminAuthPass}
                         onChange={(e) => setCurrentAdminAuthPass(e.target.value)}
                         autoComplete="current-password"
-                        placeholder="Digite a Senha Mestre do Administrador Atual"
+                        placeholder=""
                         required
                         style={{
                           width: '100%',
