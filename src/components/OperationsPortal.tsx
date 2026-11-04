@@ -941,6 +941,10 @@ export const OperationsPortal: React.FC<OperationsPortalProps> = ({
   const [isPushingCloud, setIsPushingCloud] = useState<boolean>(false);
   const [isDispatchingTransfer, setIsDispatchingTransfer] = useState<boolean>(false);
   const [isEqualizing, setIsEqualizing] = useState<boolean>(false);
+  const [isSavingClient, setIsSavingClient] = useState<boolean>(false);
+  const [isSendingTx, setIsSendingTx] = useState<boolean>(false);
+  const [isDepositing, setIsDepositing] = useState<boolean>(false);
+  const [isExecutingOrder, setIsExecutingOrder] = useState<boolean>(false);
   const [equalizationNotice, setEqualizationNotice] = useState<string>('');
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
 
@@ -1859,6 +1863,9 @@ ON CONFLICT (id) DO UPDATE SET
 
   // 1. ZERAR A LISTA DE CLIENTES DO PAINEL DAS CONFIGURAÇÕES
   const handleClearAllClients = () => {
+    if (!window.confirm('⚠️ CONFIRMAÇÃO DE SEGURANÇA: Esta ação de alta criticidade irá zerar todos os clientes e o livro razão local. Deseja realmente prosseguir?')) {
+      return;
+    }
     // Registrar todos os clientes existentes e padrão como excluídos para nunca retornarem no F5
     for (const c of exchangeClients) {
       addStoredDeletedClientRecord({
@@ -1924,6 +1931,10 @@ ON CONFLICT (id) DO UPDATE SET
 
   // 1.1 ZERAR O SALDO DE UM CLIENTE ESPECÍFICO (ELIMINAR QUALQUER MEMÓRIA DE SALDO)
   const handleResetClientBalance = async (target: ExchangeClient) => {
+    const cleanTargetName = target.name.replace(/[<>"'/`]/g, '').trim();
+    if (!window.confirm(`Confirma zerar todos os saldos de custódia e corretora do cliente "${cleanTargetName}" (${target.id})?`)) {
+      return;
+    }
     const updated = exchangeClients.map((c) => {
       if (c.id === target.id) {
         return {
@@ -2399,127 +2410,144 @@ ON CONFLICT (id) DO UPDATE SET
 
   const handleSaveRealClient = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!newClientName.trim() || !newClientEmail.trim()) {
-      setClientFormFeedback('Por favor, preencha o Nome/Razão Social e o E-mail do cliente.');
+    if (isSavingClient) return;
+
+    const cleanName = newClientName.replace(/[<>"'/`]/g, '').trim();
+    const cleanEmail = newClientEmail.replace(/[<>"'/`]/g, '').trim().toLowerCase();
+    const cleanDoc = newClientDocument.replace(/[<>"'/`]/g, '').trim();
+    const cleanAddress = newClientBitxAddress.replace(/[<>"'/`]/g, '').trim();
+    const cleanId = newClientId.replace(/[<>"'/`]/g, '').trim();
+
+    if (!cleanName || !cleanEmail || !cleanEmail.includes('@')) {
+      setClientFormFeedback('Por favor, preencha o Nome/Razão Social e um E-mail institucional válido.');
       return;
     }
 
-    const btxcNum = Math.max(0, parseFloat(newClientBtxc) || 0);
-    const brlNum = Math.max(0, parseFloat(newClientBrl) || 0);
-    const usdtNum = Math.max(0, parseFloat(newClientUsdt) || 0);
+    const rawBtxc = parseFloat(newClientBtxc);
+    const rawBrl = parseFloat(newClientBrl);
+    const rawUsdt = parseFloat(newClientUsdt);
 
-    const assignedId =
-      newClientId.trim() ||
-      (editingClient ? editingClient.id : `GX-CLI-${Math.floor(1000 + Math.random() * 9000)}`);
+    const btxcNum = isFinite(rawBtxc) && rawBtxc > 0 ? rawBtxc : 0;
+    const brlNum = isFinite(rawBrl) && rawBrl > 0 ? rawBrl : 0;
+    const usdtNum = isFinite(rawUsdt) && rawUsdt > 0 ? rawUsdt : 0;
 
-    const assignedAddress =
-      newClientBitxAddress.trim() ||
-      editingClient?.bitxAddress ||
-      `btxc1q${Array.from(crypto.getRandomValues(new Uint8Array(16)))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('')}`;
-
-    const clientRecord: ExchangeClient = {
-      id: assignedId,
-      name: newClientName.trim(),
-      email: newClientEmail.trim(),
-      document: newClientDocument.trim() || (editingClient?.document || undefined),
-      bitxAddress: assignedAddress,
-      btxcBalance: btxcNum,
-      brlBalance: brlNum,
-      usdtBalance: usdtNum,
-      // Equalizado com a cotação ativa da moeda BTXC na rede mainnet (#348.912)
-      estimatedMarketValue: +(btxcNum * price).toFixed(2),
-      status: newClientStatus,
-      createdAt: editingClient?.createdAt || new Date().toLocaleDateString('pt-BR'),
-    };
-
-    // Desbloquear ID e e-mail caso tenham sido excluídos previamente
-    clearStoredDeletedClientRecord(assignedId, newClientEmail, newClientDocument.trim());
-
-    // Eliminar qualquer memória antiga ou lançamento residual no livro razão para este cliente
-    const idLower = assignedId.toLowerCase();
-    const emailLower = newClientEmail.toLowerCase().trim();
-    const nameLower = newClientName.toLowerCase().trim();
-    const docClean = newClientDocument.replace(/\D/g, '').trim();
-
-    let cleanLedger = custodyLedger.filter((item) => {
-      const itemCid = (item as any).clientId?.toLowerCase();
-      const cpLower = (item.counterparty || '').toLowerCase();
-      if (itemCid && itemCid === idLower) return false;
-      if (idLower && cpLower.includes(idLower)) return false;
-      if (emailLower && emailLower.length > 3 && cpLower.includes(emailLower)) return false;
-      if (nameLower && nameLower.length > 5 && cpLower.includes(nameLower)) return false;
-      if (docClean && docClean.length > 5 && cpLower.includes(docClean)) return false;
-      return true;
-    });
-
-    // Se possui saldo inicial informado pelo operador, registrar como novo aporte limpo no Livro Razão
-    if (btxcNum > 0 || brlNum > 0) {
-      const txid =
-        '0x' +
-        Array.from(crypto.getRandomValues(new Uint8Array(24)))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('');
-      const custodyRecord: CustodyLedgerItem = {
-        id: 'CUST-' + Math.floor(100 + Math.random() * 900),
-        txid,
-        clientId: clientRecord.id,
-        type: editingClient ? 'Ajuste Direto com TXID' : 'Aporte Inicial',
-        amountGx: btxcNum,
-        amountBrl: brlNum > 0 ? brlNum : +(btxcNum * price).toFixed(2),
-        counterparty: `Custódia Engecema PJ -> ${clientRecord.name} (${clientRecord.id})`,
-        timestamp: new Date().toLocaleString('pt-BR'),
-        status: 'Confirmado em Custódia',
-      };
-      cleanLedger = [custodyRecord, ...cleanLedger];
-    }
-
-    setCustodyLedger(cleanLedger);
-    saveStoredCustodyLedger(cleanLedger);
-
-    // 1. Salvar e ativar imediatamente no portal BitX Core & Global Exchange
-    const updated = editingClient
-      ? exchangeClients.map((c) => (c.id === editingClient.id ? clientRecord : c))
-      : [clientRecord, ...exchangeClients.filter((c) => c.id !== assignedId && c.email.toLowerCase() !== emailLower)];
-
-    setExchangeClients(updated);
-    saveStoredRealClients(updated);
-    emitSyncToGlobalExchange(updated);
-
-    // 2. Enviar para a nuvem Supabase
+    setIsSavingClient(true);
     try {
-      const payload: any = {
-        name: clientRecord.name,
-        email: clientRecord.email,
-        document: clientRecord.document || null,
-        id: clientRecord.id,
-        bitx_address: clientRecord.bitxAddress,
-        btxc_balance: clientRecord.btxcBalance || 0,
-        gx_balance: clientRecord.btxcBalance || 0,
-        brl_balance: clientRecord.brlBalance || 0,
-        usdt_balance: clientRecord.usdtBalance || 0,
-        estimated_market_value: clientRecord.estimatedMarketValue || 0,
-        status: clientRecord.status || 'Verificado KYC',
-        updated_at: new Date().toISOString(),
+      const assignedId =
+        cleanId ||
+        (editingClient ? editingClient.id : `GX-CLI-${Math.floor(1000 + Math.random() * 9000)}`);
+
+      const assignedAddress =
+        cleanAddress ||
+        editingClient?.bitxAddress ||
+        `btxc1q${Array.from(crypto.getRandomValues(new Uint8Array(16)))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('')}`;
+
+      const clientRecord: ExchangeClient = {
+        id: assignedId,
+        name: cleanName,
+        email: cleanEmail,
+        document: cleanDoc || (editingClient?.document || undefined),
+        bitxAddress: assignedAddress,
+        btxcBalance: btxcNum,
+        brlBalance: brlNum,
+        usdtBalance: usdtNum,
+        // Equalizado com a cotação ativa da moeda BTXC na rede mainnet (#348.912)
+        estimatedMarketValue: +(btxcNum * price).toFixed(2),
+        status: newClientStatus,
+        createdAt: editingClient?.createdAt || new Date().toLocaleDateString('pt-BR'),
       };
 
-      const { error } = await supabase.from('clients').upsert([payload]);
+      // Desbloquear ID e e-mail caso tenham sido excluídos previamente
+      clearStoredDeletedClientRecord(assignedId, cleanEmail, cleanDoc);
 
-      if (error) {
-        console.warn('Aviso Supabase Cloud:', error.message);
+      // Eliminar qualquer memória antiga ou lançamento residual no livro razão para este cliente
+      const idLower = assignedId.toLowerCase();
+      const emailLower = cleanEmail;
+      const nameLower = cleanName.toLowerCase();
+      const docClean = cleanDoc.replace(/\D/g, '').trim();
+
+      let cleanLedger = custodyLedger.filter((item) => {
+        const itemCid = (item as any).clientId?.toLowerCase();
+        const cpLower = (item.counterparty || '').toLowerCase();
+        if (itemCid && itemCid === idLower) return false;
+        if (idLower && cpLower.includes(idLower)) return false;
+        if (emailLower && emailLower.length > 3 && cpLower.includes(emailLower)) return false;
+        if (nameLower && nameLower.length > 5 && cpLower.includes(nameLower)) return false;
+        if (docClean && docClean.length > 5 && cpLower.includes(docClean)) return false;
+        return true;
+      });
+
+      // Se possui saldo inicial informado pelo operador, registrar como novo aporte limpo no Livro Razão
+      if (btxcNum > 0 || brlNum > 0) {
+        const txid =
+          '0x' +
+          Array.from(crypto.getRandomValues(new Uint8Array(24)))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+        const custodyRecord: CustodyLedgerItem = {
+          id: 'CUST-' + Math.floor(100 + Math.random() * 900),
+          txid,
+          clientId: clientRecord.id,
+          type: editingClient ? 'Ajuste Direto com TXID' : 'Aporte Inicial',
+          amountGx: btxcNum,
+          amountBrl: brlNum > 0 ? brlNum : +(btxcNum * price).toFixed(2),
+          counterparty: `Custódia Engecema PJ -> ${clientRecord.name} (${clientRecord.id})`,
+          timestamp: new Date().toLocaleString('pt-BR'),
+          status: 'Confirmado em Custódia',
+        };
+        cleanLedger = [custodyRecord, ...cleanLedger];
+      }
+
+      setCustodyLedger(cleanLedger);
+      saveStoredCustodyLedger(cleanLedger);
+
+      // 1. Salvar e ativar imediatamente no portal BitX Core & Global Exchange
+      const updated = editingClient
+        ? exchangeClients.map((c) => (c.id === editingClient.id ? clientRecord : c))
+        : [clientRecord, ...exchangeClients.filter((c) => c.id !== assignedId && c.email.toLowerCase() !== emailLower)];
+
+      setExchangeClients(updated);
+      saveStoredRealClients(updated);
+      emitSyncToGlobalExchange(updated);
+
+      // 2. Enviar para a nuvem Supabase
+      try {
+        const payload: any = {
+          name: clientRecord.name,
+          email: clientRecord.email,
+          document: clientRecord.document || null,
+          id: clientRecord.id,
+          bitx_address: clientRecord.bitxAddress,
+          btxc_balance: clientRecord.btxcBalance || 0,
+          gx_balance: clientRecord.btxcBalance || 0,
+          brl_balance: clientRecord.brlBalance || 0,
+          usdt_balance: clientRecord.usdtBalance || 0,
+          estimated_market_value: clientRecord.estimatedMarketValue || 0,
+          status: clientRecord.status || 'Verificado KYC',
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await supabase.from('clients').upsert([payload]);
+
+        if (error) {
+          console.warn('Aviso Supabase Cloud:', error.message);
+          setClientFormFeedback(
+            `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) salvo localmente! Saldo: ${btxcNum.toFixed(4)} BTXC | R$ ${brlNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
+          );
+        } else {
+          setClientFormFeedback(
+            `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) cadastrado e sincronizado com sucesso na Global Exchange e no Supabase! Saldo: ${btxcNum.toFixed(4)} BTXC | R$ ${brlNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
+          );
+        }
+      } catch {
         setClientFormFeedback(
-          `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) salvo localmente! Saldo: ${btxcNum.toFixed(4)} BTXC | R$ ${brlNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
-        );
-      } else {
-        setClientFormFeedback(
-          `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) cadastrado e sincronizado com sucesso na Global Exchange e no Supabase! Saldo: ${btxcNum.toFixed(4)} BTXC | R$ ${brlNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
+          `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) cadastrado e ativo com sucesso!`
         );
       }
-    } catch {
-      setClientFormFeedback(
-        `✓ Cliente real "${clientRecord.name}" (${clientRecord.id}) cadastrado e ativo com sucesso!`
-      );
+    } finally {
+      setIsSavingClient(false);
     }
 
     handleCancelEditClient();
@@ -2929,175 +2957,185 @@ ON CONFLICT (id) DO UPDATE SET
   // Handle new transaction emission and automatic credit to client account on Global Exchange
   const handleSendTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sendTo.trim() || !sendAmount) return;
+    if (isSendingTx) return;
+    const dest = sendTo.replace(/[<>"'/`]/g, '').trim();
+    if (!dest || !sendAmount) return;
     const amt = parseFloat(sendAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    if (isNaN(amt) || !isFinite(amt) || amt <= 0) return;
 
     if (amt > walletBalance) {
       setSendFeedback('Saldo insuficiente na carteira para efetuar a transação na Mainnet.');
       return;
     }
 
-    const txid = 'tx_' + Math.random().toString(16).substring(2, 12);
-    const dest = sendTo.trim();
-    let targetClient = resolvedTargetClient;
+    setIsSendingTx(true);
+    try {
+      const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const txid = 'tx_' + randomHex;
+      let targetClient = resolvedTargetClient;
 
-    // Resolução resiliente: se ainda não encontrou, verificar se há seleção rápida ou único cliente
-    if (!targetClient && selectedTransferRecipientId && selectedTransferRecipientId !== 'auto') {
-      targetClient = exchangeClients.find((c) => c.id === selectedTransferRecipientId) || null;
-    }
-    if (!targetClient && exchangeClients.length === 1) {
-      targetClient = exchangeClients[0];
-    }
-
-    const newTx: MempoolTx = {
-      txid,
-      from: walletAddress,
-      to: dest,
-      amount: amt,
-      fee: 0.0001,
-      time: 'Agora',
-      exchangeClientTag: targetClient ? targetClient.id : (dest === exchangeHotWallet ? 'GE-DEPOSIT-DIRECT' : undefined),
-    };
-
-    setMempool((prev) => [newTx, ...prev]);
-    setWalletBalance((prev) => +(prev - amt - 0.0001).toFixed(4));
-
-    if (targetClient) {
-      // 1. Atualizar saldo do cliente na Corretora Global Exchange imediatamente
-      const newBtxc = +(targetClient.btxcBalance + amt).toFixed(4);
-      const newBrl = +(targetClient.brlBalance + amt * price).toFixed(2);
-      const newUsdt = +(newBrl / 5.0).toFixed(2);
-      const newEst = +(newBtxc * price).toFixed(2);
-
-      // Vincular permanentemente o endereço de destino ao perfil do cliente na Global Exchange
-      const currentSec = targetClient.secondaryAddresses ? [...targetClient.secondaryAddresses] : [];
-      if (targetClient.bitxAddress && targetClient.bitxAddress !== dest && !currentSec.includes(targetClient.bitxAddress)) {
-        currentSec.push(targetClient.bitxAddress);
+      // Resolução resiliente: se ainda não encontrou, verificar se há seleção rápida ou único cliente
+      if (!targetClient && selectedTransferRecipientId && selectedTransferRecipientId !== 'auto') {
+        targetClient = exchangeClients.find((c) => c.id === selectedTransferRecipientId) || null;
       }
-      if (!currentSec.includes(dest)) {
-        currentSec.push(dest);
+      if (!targetClient && exchangeClients.length === 1) {
+        targetClient = exchangeClients[0];
       }
 
-      const updatedClients = exchangeClients.map((c) => {
-        if (c.id === targetClient.id) {
-          return {
-            ...c,
-            btxcBalance: newBtxc,
-            brlBalance: newBrl,
-            usdtBalance: newUsdt,
-            estimatedMarketValue: newEst,
-            bitxAddress: dest,
-            secondaryAddresses: currentSec,
-          };
-        }
-        return c;
-      });
-
-      setExchangeClients(updatedClients);
-      saveStoredRealClients(updatedClients);
-      emitSyncToGlobalExchange(updatedClients);
-
-      // 2. Registrar no Livro Razão de Custódia Engecema (imutabilidade contábil)
-      const custodyRecord: CustodyLedgerItem = {
-        id: 'CUST-TX-' + Math.floor(Math.random() * 900 + 100),
+      const newTx: MempoolTx = {
         txid,
-        clientId: targetClient.id,
-        type: 'Transferência BitX Core Mainnet',
-        amountGx: amt,
-        amountBrl: +(amt * price).toFixed(2),
-        counterparty: `Transferência BitX Core Mainnet (${walletAddress.substring(0, 14)}...) -> ${targetClient.name} (${targetClient.id}) [Endereço: ${dest}]`,
-        timestamp: new Date().toLocaleString('pt-BR'),
-        status: 'Confirmado em Custódia',
-      };
-      const updatedLedger = [custodyRecord, ...custodyLedger];
-      setCustodyLedger(updatedLedger);
-      saveStoredCustodyLedger(updatedLedger);
-
-      // 3. Registrar no histórico de depósitos da Global Exchange
-      const newDeposit: ExchangeDepositRecord = {
-        id: 'DEP-' + Math.floor(Math.random() * 900 + 100),
-        clientId: targetClient.id,
-        clientName: targetClient.name,
-        txid,
+        from: walletAddress,
+        to: dest,
         amount: amt,
-        confirmations: 1,
-        status: 'Creditado',
+        fee: 0.0001,
         time: 'Agora',
+        exchangeClientTag: targetClient ? targetClient.id : (dest === exchangeHotWallet ? 'GE-DEPOSIT-DIRECT' : undefined),
       };
-      setExchangeDeposits((prev) => [newDeposit, ...prev]);
 
-      // 4. Sincronizar na nuvem Supabase em segundo plano com await
-      try {
-        const clientToUpdate = updatedClients.find((c) => c.id === targetClient.id);
-        if (clientToUpdate) {
-          const { error: sbErr } = await supabase.from('clients').upsert([
-            {
-              id: clientToUpdate.id,
-              name: clientToUpdate.name,
-              email: clientToUpdate.email,
-              document: clientToUpdate.document || null,
-              bitx_address: clientToUpdate.bitxAddress || dest,
-              btxc_balance: clientToUpdate.btxcBalance,
-              gx_balance: clientToUpdate.btxcBalance,
-              brl_balance: clientToUpdate.brlBalance,
-              usdt_balance: clientToUpdate.usdtBalance,
-              estimated_market_value: clientToUpdate.estimatedMarketValue,
-              status: clientToUpdate.status || 'Verificado KYC',
-              updated_at: new Date().toISOString(),
-            },
-          ]);
-          if (sbErr) {
-            console.warn('[Sync Transfer to Supabase]:', sbErr.message);
-          }
+      setMempool((prev) => [newTx, ...prev]);
+      setWalletBalance((prev) => +(prev - amt - 0.0001).toFixed(4));
+
+      if (targetClient) {
+        // 1. Atualizar saldo do cliente na Corretora Global Exchange imediatamente
+        const newBtxc = +(targetClient.btxcBalance + amt).toFixed(4);
+        const newBrl = +(targetClient.brlBalance + amt * price).toFixed(2);
+        const newUsdt = +(newBrl / 5.0).toFixed(2);
+        const newEst = +(newBtxc * price).toFixed(2);
+
+        // Vincular permanentemente o endereço de destino ao perfil do cliente na Global Exchange
+        const currentSec = targetClient.secondaryAddresses ? [...targetClient.secondaryAddresses] : [];
+        if (targetClient.bitxAddress && targetClient.bitxAddress !== dest && !currentSec.includes(targetClient.bitxAddress)) {
+          currentSec.push(targetClient.bitxAddress);
         }
-      } catch (err) {
-        console.warn('[Sync Transfer to Supabase]:', err);
+        if (!currentSec.includes(dest)) {
+          currentSec.push(dest);
+        }
+
+        const updatedClients = exchangeClients.map((c) => {
+          if (c.id === targetClient.id) {
+            return {
+              ...c,
+              btxcBalance: newBtxc,
+              brlBalance: newBrl,
+              usdtBalance: newUsdt,
+              estimatedMarketValue: newEst,
+              bitxAddress: dest,
+              secondaryAddresses: currentSec,
+            };
+          }
+          return c;
+        });
+
+        setExchangeClients(updatedClients);
+        saveStoredRealClients(updatedClients);
+        emitSyncToGlobalExchange(updatedClients);
+
+        // 2. Registrar no Livro Razão de Custódia Engecema (imutabilidade contábil)
+        const custodyRecord: CustodyLedgerItem = {
+          id: 'CUST-TX-' + Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase(),
+          txid,
+          clientId: targetClient.id,
+          type: 'Transferência BitX Core Mainnet',
+          amountGx: amt,
+          amountBrl: +(amt * price).toFixed(2),
+          counterparty: `Transferência BitX Core Mainnet (${walletAddress.substring(0, 14)}...) -> ${targetClient.name} (${targetClient.id}) [Endereço: ${dest}]`,
+          timestamp: new Date().toLocaleString('pt-BR'),
+          status: 'Confirmado em Custódia',
+        };
+        const updatedLedger = [custodyRecord, ...custodyLedger];
+        setCustodyLedger(updatedLedger);
+        saveStoredCustodyLedger(updatedLedger);
+
+        // 3. Registrar no histórico de depósitos da Global Exchange
+        const newDeposit: ExchangeDepositRecord = {
+          id: 'DEP-' + Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase(),
+          clientId: targetClient.id,
+          clientName: targetClient.name,
+          txid,
+          amount: amt,
+          confirmations: 1,
+          status: 'Creditado',
+          time: 'Agora',
+        };
+        setExchangeDeposits((prev) => [newDeposit, ...prev]);
+
+        // 4. Sincronizar na nuvem Supabase em segundo plano com await
+        try {
+          const clientToUpdate = updatedClients.find((c) => c.id === targetClient.id);
+          if (clientToUpdate) {
+            const { error: sbErr } = await supabase.from('clients').upsert([
+              {
+                id: clientToUpdate.id,
+                name: clientToUpdate.name,
+                email: clientToUpdate.email,
+                document: clientToUpdate.document || null,
+                bitx_address: clientToUpdate.bitxAddress || dest,
+                btxc_balance: clientToUpdate.btxcBalance,
+                gx_balance: clientToUpdate.btxcBalance,
+                brl_balance: clientToUpdate.brlBalance,
+                usdt_balance: clientToUpdate.usdtBalance,
+                estimated_market_value: clientToUpdate.estimatedMarketValue,
+                status: clientToUpdate.status || 'Verificado KYC',
+                updated_at: new Date().toISOString(),
+              },
+            ]);
+            if (sbErr) {
+              console.warn('[Sync Transfer to Supabase]:', sbErr.message);
+            }
+          }
+        } catch (err) {
+          console.warn('[Sync Transfer to Supabase]:', err);
+        }
+
+        // 5. Atualizar estado compartilhado da carteira local
+        try {
+          const currentClientBal = parseFloat(localStorage.getItem('bitx_client_balance') || '0');
+          const newWalletBal = +(currentClientBal + amt).toFixed(4);
+          localStorage.setItem('bitx_client_balance', newWalletBal.toString());
+          const currentClientTxs = JSON.parse(localStorage.getItem('bitx_client_txs') || '[]');
+          const walletTx = {
+            id: txid,
+            type: 'received',
+            amount: amt,
+            counterparty: `Transferência BitX Core Mainnet (${walletAddress.substring(0, 14)}...)`,
+            time: 'Hoje, ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            status: 'Confirmado na Mainnet',
+          };
+          localStorage.setItem('bitx_client_txs', JSON.stringify([walletTx, ...currentClientTxs]));
+        } catch {}
+
+        // 6. Transmitir e despachar automaticamente via canal inter-plataformas BitX Core -> Global Exchange
+        handleDispatchTransferToGlobalExchange(custodyRecord);
+
+        setSendFeedback(
+          `✓ Transferência ${txid} realizada e DESPACHADA com sucesso! O valor de +${amt.toFixed(4)} BTXC (R$ ${(amt * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) foi creditado e liquidado diretamente na conta comercial de "${targetClient.name}" (${targetClient.id}) na Global Exchange via canal inter-plataformas!`
+        );
+        addLog(
+          `[Canal Inter-Plataformas BitX Core -> Global Exchange] +${amt.toFixed(4)} BTXC transmitidos e liquidados na conta de ${targetClient.name} (${targetClient.id}). Saldo consolidado: ${newBtxc.toFixed(4)} BTXC. TXID: ${txid}`,
+          'success'
+        );
+      } else {
+        setSendFeedback(
+          `⚠️ Transação ${txid} (${amt.toFixed(4)} BTXC) adicionada à Mempool. ATENÇÃO: O endereço "${dest}" não está vinculado a nenhum cliente da Global Exchange! O saldo NÃO foi creditado em nenhuma conta. Para creditar na conta de um cliente, selecione o cliente no menu de destinatários ou vincule este endereço ao perfil do cliente nas Configurações.`
+        );
+        addLog(`Nova transação ${txid} (${amt} BTXC) para ${dest} na Mempool (sem cliente vinculado).`, 'warning');
       }
 
-      // 5. Atualizar estado compartilhado da carteira local
-      try {
-        const currentClientBal = parseFloat(localStorage.getItem('bitx_client_balance') || '0');
-        const newWalletBal = +(currentClientBal + amt).toFixed(4);
-        localStorage.setItem('bitx_client_balance', newWalletBal.toString());
-        const currentClientTxs = JSON.parse(localStorage.getItem('bitx_client_txs') || '[]');
-        const walletTx = {
-          id: txid,
-          type: 'received',
-          amount: amt,
-          counterparty: `Transferência BitX Core Mainnet (${walletAddress.substring(0, 14)}...)`,
-          time: 'Hoje, ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          status: 'Confirmado na Mainnet',
-        };
-        localStorage.setItem('bitx_client_txs', JSON.stringify([walletTx, ...currentClientTxs]));
-      } catch {}
-
-      // 6. Transmitir e despachar automaticamente via canal inter-plataformas BitX Core -> Global Exchange
-      handleDispatchTransferToGlobalExchange(custodyRecord);
-
-      setSendFeedback(
-        `✓ Transferência ${txid} realizada e DESPACHADA com sucesso! O valor de +${amt.toFixed(4)} BTXC (R$ ${(amt * price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) foi creditado e liquidado diretamente na conta comercial de "${targetClient.name}" (${targetClient.id}) na Global Exchange via canal inter-plataformas!`
-      );
-      addLog(
-        `[Canal Inter-Plataformas BitX Core -> Global Exchange] +${amt.toFixed(4)} BTXC transmitidos e liquidados na conta de ${targetClient.name} (${targetClient.id}). Saldo consolidado: ${newBtxc.toFixed(4)} BTXC. TXID: ${txid}`,
-        'success'
-      );
-    } else {
-      setSendFeedback(
-        `⚠️ Transação ${txid} (${amt.toFixed(4)} BTXC) adicionada à Mempool. ATENÇÃO: O endereço "${dest}" não está vinculado a nenhum cliente da Global Exchange! O saldo NÃO foi creditado em nenhuma conta. Para creditar na conta de um cliente, selecione o cliente no menu de destinatários ou vincule este endereço ao perfil do cliente nas Configurações.`
-      );
-      addLog(`Nova transação ${txid} (${amt} BTXC) para ${dest} na Mempool (sem cliente vinculado).`, 'warning');
+      setSendTo('');
+      setSendAmount('');
+    } finally {
+      setTimeout(() => setIsSendingTx(false), 500);
     }
-
-    setSendTo('');
-    setSendAmount('');
   };
 
   // Handle client deposit into Global Exchange
   const handleDepositToExchange = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDepositing) return;
     const amt = parseFloat(depositAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    if (isNaN(amt) || !isFinite(amt) || amt <= 0) return;
 
     if (amt > walletBalance) {
       setDepositAlert('Saldo insuficiente para enviar o depósito.');
@@ -3107,106 +3145,115 @@ ON CONFLICT (id) DO UPDATE SET
     const client = exchangeClients.find((c) => c.id === depositClientId);
     if (!client) return;
 
-    const txid = 'tx_ge_dep_' + Math.random().toString(16).substring(2, 10);
-    const newTx: MempoolTx = {
-      txid,
-      from: walletAddress,
-      to: exchangeHotWallet,
-      amount: amt,
-      fee: 0.0001,
-      time: 'Agora',
-      exchangeClientTag: client.id,
-    };
-
-    const newDeposit: ExchangeDepositRecord = {
-      id: 'DEP-' + Math.floor(Math.random() * 900 + 100),
-      clientId: client.id,
-      clientName: client.name,
-      txid,
-      amount: amt,
-      confirmations: 0,
-      status: 'Pendente',
-      time: 'Agora',
-    };
-
-    setMempool((prev) => [newTx, ...prev]);
-    setWalletBalance((prev) => prev - amt - 0.0001);
-    setExchangeDeposits((prev) => [newDeposit, ...prev]);
-
-    // Update client balance on broker & sync with custody ledger
-    const updatedWithDeposit = exchangeClients.map((c) => {
-      if (c.id === client.id) {
-        const newBtxc = +(c.btxcBalance + amt).toFixed(4);
-        const newBrl = +(newBtxc * price).toFixed(2);
-        const newUsdt = +(newBrl / 5.0).toFixed(2);
-        const newEst = +(newBtxc * price).toFixed(2);
-        return {
-          ...c,
-          btxcBalance: newBtxc,
-          brlBalance: newBrl,
-          usdtBalance: newUsdt,
-          estimatedMarketValue: newEst,
-        };
-      }
-      return c;
-    });
-    setExchangeClients(updatedWithDeposit);
-    saveStoredRealClients(updatedWithDeposit);
-    emitSyncToGlobalExchange(updatedWithDeposit);
-
-    // Sincronizar cliente atualizado no Supabase Cloud
+    setIsDepositing(true);
     try {
-      const updatedClient = updatedWithDeposit.find((c) => c.id === client.id);
-      if (updatedClient) {
-        supabase.from('clients').upsert([
-          {
-            id: updatedClient.id,
-            name: updatedClient.name,
-            email: updatedClient.email,
-            document: updatedClient.document || null,
-            bitx_address: updatedClient.bitxAddress,
-            btxc_balance: updatedClient.btxcBalance,
-            gx_balance: updatedClient.btxcBalance,
-            brl_balance: updatedClient.brlBalance,
-            usdt_balance: updatedClient.usdtBalance,
-            estimated_market_value: updatedClient.estimatedMarketValue,
-            status: updatedClient.status || 'Verificado KYC',
-            updated_at: new Date().toISOString(),
-          },
-        ]).then();
-      }
-    } catch {}
+      const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(5)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const txid = 'tx_ge_dep_' + randomHex;
+      const newTx: MempoolTx = {
+        txid,
+        from: walletAddress,
+        to: exchangeHotWallet,
+        amount: amt,
+        fee: 0.0001,
+        time: 'Agora',
+        exchangeClientTag: client.id,
+      };
 
-    // Sincronizar depósito com o Livro Razão de Custódia & Liquidação Engecema
-    const custodyRecord: CustodyLedgerItem = {
-      id: 'CUST-DEP-' + Math.floor(Math.random() * 900 + 100),
-      txid,
-      clientId: client.id,
-      type: 'Depósito Blockchain BitX Core',
-      amountGx: amt,
-      amountBrl: +(amt * price).toFixed(2),
-      counterparty: `Depósito Blockchain BitX Core -> ${client.name} (${client.id})`,
-      timestamp: new Date().toLocaleString('pt-BR'),
-      status: 'Confirmado em Custódia',
-    };
-    const newLedger = [custodyRecord, ...custodyLedger];
-    setCustodyLedger(newLedger);
-    saveStoredCustodyLedger(newLedger);
+      const newDeposit: ExchangeDepositRecord = {
+        id: 'DEP-' + Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase(),
+        clientId: client.id,
+        clientName: client.name,
+        txid,
+        amount: amt,
+        confirmations: 0,
+        status: 'Pendente',
+        time: 'Agora',
+      };
 
-    setDepositAlert(
-      `Depósito de ${amt} BTXC para o cliente ${client.name} (${client.id}) transmitido! Tag vinculada à carteira da Global Exchange.`
-    );
-    addLog(
-      `Depósito de cliente ${client.id} (${amt} BTXC) enviado para Hot Wallet da Global Exchange (${exchangeHotWallet.substring(0, 16)}...).`,
-      'success'
-    );
+      setMempool((prev) => [newTx, ...prev]);
+      setWalletBalance((prev) => prev - amt - 0.0001);
+      setExchangeDeposits((prev) => [newDeposit, ...prev]);
+
+      // Update client balance on broker & sync with custody ledger
+      const updatedWithDeposit = exchangeClients.map((c) => {
+        if (c.id === client.id) {
+          const newBtxc = +(c.btxcBalance + amt).toFixed(4);
+          const newBrl = +(newBtxc * price).toFixed(2);
+          const newUsdt = +(newBrl / 5.0).toFixed(2);
+          const newEst = +(newBtxc * price).toFixed(2);
+          return {
+            ...c,
+            btxcBalance: newBtxc,
+            brlBalance: newBrl,
+            usdtBalance: newUsdt,
+            estimatedMarketValue: newEst,
+          };
+        }
+        return c;
+      });
+      setExchangeClients(updatedWithDeposit);
+      saveStoredRealClients(updatedWithDeposit);
+      emitSyncToGlobalExchange(updatedWithDeposit);
+
+      // Sincronizar cliente atualizado no Supabase Cloud
+      try {
+        const updatedClient = updatedWithDeposit.find((c) => c.id === client.id);
+        if (updatedClient) {
+          supabase.from('clients').upsert([
+            {
+              id: updatedClient.id,
+              name: updatedClient.name,
+              email: updatedClient.email,
+              document: updatedClient.document || null,
+              bitx_address: updatedClient.bitxAddress,
+              btxc_balance: updatedClient.btxcBalance,
+              gx_balance: updatedClient.btxcBalance,
+              brl_balance: updatedClient.brlBalance,
+              usdt_balance: updatedClient.usdtBalance,
+              estimated_market_value: updatedClient.estimatedMarketValue,
+              status: updatedClient.status || 'Verificado KYC',
+              updated_at: new Date().toISOString(),
+            },
+          ]).then();
+        }
+      } catch {}
+
+      // Sincronizar depósito com o Livro Razão de Custódia & Liquidação Engecema
+      const custodyRecord: CustodyLedgerItem = {
+        id: 'CUST-DEP-' + Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase(),
+        txid,
+        clientId: client.id,
+        type: 'Depósito Blockchain BitX Core',
+        amountGx: amt,
+        amountBrl: +(amt * price).toFixed(2),
+        counterparty: `Depósito Blockchain BitX Core -> ${client.name} (${client.id})`,
+        timestamp: new Date().toLocaleString('pt-BR'),
+        status: 'Confirmado em Custódia',
+      };
+      const newLedger = [custodyRecord, ...custodyLedger];
+      setCustodyLedger(newLedger);
+      saveStoredCustodyLedger(newLedger);
+
+      setDepositAlert(
+        `Depósito de ${amt} BTXC para o cliente ${client.name} (${client.id}) transmitido! Tag vinculada à carteira da Global Exchange.`
+      );
+      addLog(
+        `Depósito de cliente ${client.id} (${amt} BTXC) enviado para Hot Wallet da Global Exchange (${exchangeHotWallet.substring(0, 16)}...).`,
+        'success'
+      );
+    } finally {
+      setTimeout(() => setIsDepositing(false), 500);
+    }
   };
 
   // Handle Client Buy / Sell Order on Global Exchange (Vinculado à Conta do Cliente Real)
   const handleExecuteExchangeOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isExecutingOrder) return;
     const amt = parseFloat(orderAmount);
-    if (isNaN(amt) || amt <= 0) {
+    if (isNaN(amt) || !isFinite(amt) || amt <= 0) {
       setOrderFeedback('Informe uma quantidade válida de BTXC.');
       return;
     }
@@ -3217,58 +3264,63 @@ ON CONFLICT (id) DO UPDATE SET
       return;
     }
 
-    const totalBrl = amt * price;
+    setIsExecutingOrder(true);
+    try {
+      const totalBrl = amt * price;
 
-    if (orderSide === 'buy') {
-      if (client.brlBalance < totalBrl) {
-        setOrderFeedback(
-          `Saldo em BRL insuficiente na conta de "${client.name}". Disponível: R$ ${client.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Necessário: R$ ${totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`
+      if (orderSide === 'buy') {
+        if (client.brlBalance < totalBrl) {
+          setOrderFeedback(
+            `Saldo em BRL insuficiente na conta de "${client.name}". Disponível: R$ ${client.brlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Necessário: R$ ${totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`
+          );
+          return;
+        }
+        setExchangeClients((prev) =>
+          prev.map((c) =>
+            c.id === client.id
+              ? {
+                  ...c,
+                  brlBalance: +(c.brlBalance - totalBrl).toFixed(2),
+                  btxcBalance: +(c.btxcBalance + amt).toFixed(4),
+                }
+              : c
+          )
         );
-        return;
-      }
-      setExchangeClients((prev) =>
-        prev.map((c) =>
-          c.id === client.id
-            ? {
-                ...c,
-                brlBalance: +(c.brlBalance - totalBrl).toFixed(2),
-                btxcBalance: +(c.btxcBalance + amt).toFixed(4),
-              }
-            : c
-        )
-      );
-      setOrderFeedback(
-        `✓ Ordem de COMPRA executada para ${client.name} (${client.id})! +${amt.toFixed(4)} BTXC creditados e R$ ${totalBrl.toFixed(2)} liquidados.`
-      );
-    } else {
-      if (client.btxcBalance < amt) {
         setOrderFeedback(
-          `Saldo em BTXC insuficiente na conta de "${client.name}". Disponível: ${client.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 4 })} BTXC.`
+          `✓ Ordem de COMPRA executada para ${client.name} (${client.id})! +${amt.toFixed(4)} BTXC creditados e R$ ${totalBrl.toFixed(2)} liquidados.`
         );
-        return;
+      } else {
+        if (client.btxcBalance < amt) {
+          setOrderFeedback(
+            `Saldo em BTXC insuficiente na conta de "${client.name}". Disponível: ${client.btxcBalance.toLocaleString('pt-BR', { minimumFractionDigits: 4 })} BTXC.`
+          );
+          return;
+        }
+        setExchangeClients((prev) =>
+          prev.map((c) =>
+            c.id === client.id
+              ? {
+                  ...c,
+                  btxcBalance: +(c.btxcBalance - amt).toFixed(4),
+                  brlBalance: +(c.brlBalance + totalBrl).toFixed(2),
+                }
+              : c
+          )
+        );
+        setOrderFeedback(
+          `✓ Ordem de VENDA executada para ${client.name} (${client.id})! -${amt.toFixed(4)} BTXC debitados e R$ ${totalBrl.toFixed(2)} creditados em saldo BRL.`
+        );
       }
-      setExchangeClients((prev) =>
-        prev.map((c) =>
-          c.id === client.id
-            ? {
-                ...c,
-                btxcBalance: +(c.btxcBalance - amt).toFixed(4),
-                brlBalance: +(c.brlBalance + totalBrl).toFixed(2),
-              }
-            : c
-        )
+
+      addLog(
+        `[Global Exchange] Ordem executada para cliente real ${client.name} (${client.id}): ${orderSide.toUpperCase()} ${amt} BTXC @ R$ ${price.toFixed(2)} (Total: R$ ${totalBrl.toFixed(2)}).`,
+        'success'
       );
-      setOrderFeedback(
-        `✓ Ordem de VENDA executada para ${client.name} (${client.id})! -${amt.toFixed(4)} BTXC debitados e R$ ${totalBrl.toFixed(2)} creditados em saldo BRL.`
-      );
+
+      setTimeout(() => setOrderFeedback(''), 6000);
+    } finally {
+      setTimeout(() => setIsExecutingOrder(false), 500);
     }
-
-    addLog(
-      `[Global Exchange] Ordem executada para cliente real ${client.name} (${client.id}): ${orderSide.toUpperCase()} ${amt} BTXC @ R$ ${price.toFixed(2)} (Total: R$ ${totalBrl.toFixed(2)}).`,
-      'success'
-    );
-
-    setTimeout(() => setOrderFeedback(''), 6000);
   };
 
   // Generate bitx.conf content for REAL MAINNET
@@ -5699,8 +5751,8 @@ daemon=1
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button type="submit" className="portal-btn portal-btn-primary">
-                    {editingClient ? '✓ Atualizar e Sincronizar Cliente' : '＋ Cadastrar e Sincronizar Cliente Real'}
+                  <button type="submit" className="portal-btn portal-btn-primary" disabled={isSavingClient}>
+                    {isSavingClient ? 'Salvando e Sincronizando...' : (editingClient ? '✓ Atualizar e Sincronizar Cliente' : '＋ Cadastrar e Sincronizar Cliente Real')}
                   </button>
                   {editingClient && (
                     <button
@@ -6514,8 +6566,8 @@ daemon=1
                     <strong style={{ color: '#10b981' }}>{walletBalance.toFixed(4)} BTXC</strong>
                   </div>
 
-                  <button type="submit" className="portal-btn portal-btn-primary">
-                    Transmitir para a Mempool Mainnet
+                  <button type="submit" className="portal-btn portal-btn-primary" disabled={isSendingTx}>
+                    {isSendingTx ? 'Transmitindo para a Mempool...' : 'Transmitir para a Mempool Mainnet'}
                   </button>
                 </div>
 
@@ -8665,14 +8717,17 @@ daemon=1
                 <button
                   type="submit"
                   className="portal-btn portal-btn-primary"
+                  disabled={isSavingClient}
                   style={{
                     background: '#059669',
                     borderColor: '#10b981',
                     fontWeight: 800,
                     padding: '8px 20px',
+                    opacity: isSavingClient ? 0.7 : 1,
+                    cursor: isSavingClient ? 'wait' : 'pointer',
                   }}
                 >
-                  ✓ Salvar Alterações & Sincronizar
+                  {isSavingClient ? 'Salvando...' : '✓ Salvar Alterações & Sincronizar'}
                 </button>
               </div>
             </form>

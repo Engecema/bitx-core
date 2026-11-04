@@ -171,6 +171,10 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
 
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockError, setUnlockError] = useState('');
+  const [unlockAttempts, setUnlockAttempts] = useState(0);
+  const [unlockLockoutUntil, setUnlockLockoutUntil] = useState<number>(0);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [, setLockoutTick] = useState(0);
 
   // Send form
   const [sendAddress, setSendAddress] = useState('');
@@ -197,6 +201,19 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       setStoredRecord(rec);
     }
   }, []);
+
+  // Timer para atualização em tempo real de contagem regressiva de bloqueio
+  useEffect(() => {
+    if (unlockLockoutUntil > Date.now()) {
+      const interval = setInterval(() => {
+        setLockoutTick((t) => t + 1);
+        if (Date.now() >= unlockLockoutUntil) {
+          clearInterval(interval);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [unlockLockoutUntil]);
 
   // Sincronização em tempo real com o Portal de Operações e Livro Razão
   useEffect(() => {
@@ -462,15 +479,25 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUnlocking) return;
+    if (Date.now() < unlockLockoutUntil) {
+      const secs = Math.ceil((unlockLockoutUntil - Date.now()) / 1000);
+      setUnlockError(`Muitas tentativas incorretas. Aguarde ${secs}s para tentar novamente.`);
+      return;
+    }
     if (!storedRecord) {
       showToast('Não há carteira cifrada salva neste dispositivo.');
       return;
     }
+    setIsUnlocking(true);
+    // Atraso de 350ms para atenuar timing attacks
+    await new Promise((r) => setTimeout(r, 350));
     try {
       const mnemonic = await decryptMnemonic(storedRecord, unlockPassword);
       if (!validateMnemonicPhrase(mnemonic)) {
         throw new Error('Frase de recuperação inválida');
       }
+      setUnlockAttempts(0);
       setUnlockError('');
       setUnlockPassword('');
       setUnlockedMnemonic(mnemonic);
@@ -478,7 +505,16 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
       setPanelView('overview');
       showToast('Carteira Mainnet desbloqueada com sucesso.');
     } catch {
-      setUnlockError('Senha incorreta.');
+      const newAttempts = unlockAttempts + 1;
+      setUnlockAttempts(newAttempts);
+      if (newAttempts >= 5) {
+        setUnlockLockoutUntil(Date.now() + 30000);
+        setUnlockError('5 tentativas incorretas consecutivas. Acesso temporariamente bloqueado por 30 segundos.');
+      } else {
+        setUnlockError(`Senha incorreta. Restam ${5 - newAttempts} tentativa(s) antes do bloqueio temporário.`);
+      }
+    } finally {
+      setIsUnlocking(false);
     }
   };
 
@@ -524,13 +560,15 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
   // Real Mainnet Transaction Submission
   const handleSendSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sendAddress.trim()) {
-      showToast('Informe o endereço de destino.');
+    if (isSending) return;
+    const cleanAddress = sendAddress.replace(/[<>"'/`]/g, '').trim();
+    if (!cleanAddress) {
+      showToast('Informe um endereço de destino válido.');
       return;
     }
     const amt = parseFloat(sendAmount);
-    if (isNaN(amt) || amt <= 0) {
-      showToast('Informe um valor válido.');
+    if (isNaN(amt) || !isFinite(amt) || amt <= 0) {
+      showToast('Informe um valor numérico válido.');
       return;
     }
     const fee = 0.0001;
@@ -540,39 +578,45 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
     }
 
     setIsSending(true);
-    await new Promise((r) => setTimeout(r, 700));
-
-    const isToExchange = sendAddress.trim() === exchangeHotWallet;
-    const txid = 'tx_mainnet_' + Math.random().toString(16).substring(2, 12);
-    const newBalance = +(balance - amt - fee).toFixed(6);
-    setBalance(newBalance);
     try {
-      localStorage.setItem('bitx_client_balance', newBalance.toString());
-    } catch {}
+      await new Promise((r) => setTimeout(r, 600));
 
-    const newActivity: WalletActivity = {
-      id: txid,
-      type: isToExchange ? 'exchange_deposit' : 'sent',
-      amount: amt,
-      counterparty: sendAddress.trim(),
-      time: 'Agora',
-      status: 'Confirmado na Mainnet',
-    };
+      const isToExchange = cleanAddress === exchangeHotWallet;
+      const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const txid = 'tx_mainnet_' + randomHex;
+      const newBalance = +(balance - amt - fee).toFixed(6);
+      setBalance(newBalance);
+      try {
+        localStorage.setItem('bitx_client_balance', newBalance.toString());
+      } catch {}
 
-    const updatedActs = [newActivity, ...activities];
-    setActivities(updatedActs);
-    try {
-      localStorage.setItem('bitx_client_txs', JSON.stringify(updatedActs));
-    } catch {}
+      const newActivity: WalletActivity = {
+        id: txid,
+        type: isToExchange ? 'exchange_deposit' : 'sent',
+        amount: amt,
+        counterparty: cleanAddress,
+        time: 'Agora',
+        status: 'Confirmado na Mainnet',
+      };
 
-    setIsSending(false);
-    setSendAddress('');
-    setSendAmount('');
-    showToast(
-      isToExchange
-        ? `Depósito de ${amt} BTXC na Global Exchange concluído! TX: ${txid.substring(0, 16)}...`
-        : `Transação Mainnet transmitida com sucesso! TX: ${txid.substring(0, 16)}...`
-    );
+      const updatedActs = [newActivity, ...activities];
+      setActivities(updatedActs);
+      try {
+        localStorage.setItem('bitx_client_txs', JSON.stringify(updatedActs));
+      } catch {}
+
+      setSendAddress('');
+      setSendAmount('');
+      showToast(
+        isToExchange
+          ? `Depósito de ${amt} BTXC na Global Exchange concluído! TX: ${txid.substring(0, 16)}...`
+          : `Transação Mainnet transmitida com sucesso! TX: ${txid.substring(0, 16)}...`
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   // Determine page title
@@ -848,9 +892,16 @@ export const ClientWallet: React.FC<ClientWalletProps> = ({
                             placeholder="Senha de acesso local"
                             value={unlockPassword}
                             onChange={(e) => setUnlockPassword(e.target.value)}
+                            disabled={isUnlocking || Date.now() < unlockLockoutUntil}
                           />
-                          <button type="submit" className="wallet-button">
-                            Desbloquear
+                          <button
+                            type="submit"
+                            className="wallet-button"
+                            disabled={isUnlocking || Date.now() < unlockLockoutUntil}
+                          >
+                            {Date.now() < unlockLockoutUntil
+                              ? `Aguarde (${Math.ceil((unlockLockoutUntil - Date.now()) / 1000)}s)`
+                              : (isUnlocking ? 'Verificando...' : 'Desbloquear')}
                           </button>
                         </div>
                         {unlockError && (
