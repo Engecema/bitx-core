@@ -2,21 +2,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Validação imediata de sessão antes de montar qualquer elemento visual no DOM
 if (typeof window !== 'undefined') {
-  const isAuth =
-    sessionStorage.getItem('bitx_admin_session') === 'active' ||
-    sessionStorage.getItem('bitx_admin_auth') === 'true';
-
-  const isPublic =
-    window.location.hash === '#site' ||
-    window.location.hash === '#carteira' ||
-    window.location.search.includes('view=site') ||
-    window.location.search.includes('view=carteira');
-
-  if (!isAuth && !isPublic && !window.location.pathname.endsWith('login.html')) {
-    window.location.replace('login.html');
-  }
+  try {
+    localStorage.removeItem('bitx_desktop_secure_vault_mirror_v1');
+    localStorage.removeItem('bitx_ge_admin_operators_v3');
+    localStorage.removeItem('bitx_users');
+    indexedDB.deleteDatabase('bitx_desktop_secure_vault_db');
+  } catch {}
 }
 
 const rootEl = document.getElementById('root');

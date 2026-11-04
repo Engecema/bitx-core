@@ -1,25 +1,41 @@
 import { resolve } from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const rawPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const port = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 3000;
 
-// Cabeçalhos HTTP de segurança para aplicação descentralizada / Web3 local
-// Nota: Em ambiente de desenvolvimento e preview embutido (iFrame do AI Studio),
-// não usamos X-Frame-Options: DENY para permitir a exibição no console/container.
-const securityHeaders = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-  'Pragma': 'no-cache',
-  'Expires': '0',
-  'Surrogate-Control': 'no-store',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
-  'Content-Security-Policy': "frame-ancestors 'self' https://*.run.app https://*.google.com https://aistudio.google.com;",
-};
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  const supabaseOrigin = new URL(
+    env.VITE_SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co'
+  ).origin;
+  const realtimeOrigin = supabaseOrigin.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+  const securityHeaders = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'Surrogate-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Strict-Transport-Security': 'max-age=31536000',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'self'",
+      "form-action 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob:",
+      `connect-src 'self' ${supabaseOrigin} ${realtimeOrigin}`,
+    ].join('; '),
+  };
 
-export default defineConfig({
+  return {
   plugins: [react()],
   resolve: {
     dedupe: ['react', 'react-dom'],
@@ -49,13 +65,14 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port,
-    allowedHosts: true,
+    allowedHosts: ['.onrender.com', '.app.github.dev', 'localhost'],
     headers: securityHeaders,
   },
   preview: {
     host: '0.0.0.0',
     port,
-    allowedHosts: true,
+    allowedHosts: ['.onrender.com', '.app.github.dev', 'localhost'],
     headers: securityHeaders,
   },
+  };
 });
