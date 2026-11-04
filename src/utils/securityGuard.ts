@@ -8,6 +8,8 @@
  * 4. Isolamento e controle de abort de requisições ativas da blockchain
  */
 
+import { persistentVault } from './persistentVault';
+
 export interface SecurityStatus {
   isLocked: boolean;
   lockReason: string | null;
@@ -29,7 +31,9 @@ class BitXSecurityGuard {
     purgeCompleted: false,
   };
 
-  private constructor() {}
+  private constructor() {
+    this.initLifecycleGuards();
+  }
 
   public static getInstance(): BitXSecurityGuard {
     if (!BitXSecurityGuard.instance) {
@@ -67,10 +71,12 @@ class BitXSecurityGuard {
    */
   public purgeSensitiveStorage(): void {
     try {
+      // 1. Abortar qualquer requisição RPC ou SSE/WebSocket em trânsito
       this.abortController.abort();
       this.abortController = new AbortController();
 
-      const ephemeralKeys = [
+      // 2. Chaves críticas conhecidas no ecossistema BitX Core
+      const sensitiveKeys = [
         'bitx_client_seed',
         'bitx_priv_key',
         'bitx_client_balance',
@@ -83,34 +89,79 @@ class BitXSecurityGuard {
         'bitx_blocks',
         'bitx_mempool',
         'bitx_clients',
-        'bitx_exchange_clients',
-        'bitx_real_exchange_clients',
-        'bitx_ge_synced_clients',
-        'bitx_ge_deposits',
-        'bitx_custody_ledger',
-        'bitx_client_txs',
-        'global_exchange_transfers',
-        'ge_transfers',
-        'global_exchange_activities',
-        'global_exchange_client_balance',
-        'ge_client_balance',
-        'bitx_ge_admin_operators_v3',
         'bitx_operator_session',
         'bitx_active_session',
-        'bitx_users',
-        'bitx_desktop_secure_vault_mirror_v1',
+        'supabase.auth.token',
+        'sb-odbbtgkxgiqlfhcepwuj-auth-token',
       ];
 
-      ephemeralKeys.forEach((key) => {
+      // 3. Sobrescrita de lixo criptográfico (Wipe pattern) em localStorage
+      sensitiveKeys.forEach((key) => {
         try {
-          localStorage.removeItem(key);
+          if (localStorage.getItem(key)) {
+            const randomGarbage = Array.from(crypto.getRandomValues(new Uint8Array(64)))
+              .map((b) => b.toString(16).padStart(2, '0'))
+              .join('');
+            localStorage.setItem(key, randomGarbage);
+            localStorage.removeItem(key);
+          }
         } catch {}
       });
 
-      sessionStorage.clear();
+      // 3.1. Backup do Cofre Desktop do Administrador Geral
+      let vaultBackup: string | null = null;
       try {
-        indexedDB.deleteDatabase('bitx_desktop_secure_vault_db');
+        vaultBackup = persistentVault.backupVaultForPurge();
       } catch {}
+
+      // 4. Limpeza de chaves de sessão e storages voláteis
+      const protectedKeys = [
+        'bitx_desktop_secure_vault_mirror_v1',
+        'bitx_ge_admin_operators_v3',
+        'bitx_users',
+      ];
+      const protectedValues: Record<string, string> = {};
+      protectedKeys.forEach((k) => {
+        try {
+          const val = localStorage.getItem(k);
+          if (val) protectedValues[k] = val;
+        } catch {}
+      });
+
+      // Limpeza total de sessionStorage (sessões voláteis)
+      sessionStorage.clear();
+
+      // Limpeza seletiva de localStorage preservando o cofre desktop
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && !protectedKeys.includes(key)) {
+            localStorage.removeItem(key);
+          }
+        }
+
+        // Reafirmar registros protegidos do Administrador Geral
+        Object.entries(protectedValues).forEach(([k, v]) => {
+          localStorage.setItem(k, v);
+        });
+
+        // Restaurar cofre no persistentVault
+        if (vaultBackup) {
+          persistentVault.restoreVaultAfterPurge(vaultBackup);
+        }
+      } catch {}
+
+      // 5. Limpeza de cookies de sessão (se acessíveis via JS)
+      try {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+        }
+      } catch {}
+
       this.status.purgeCompleted = true;
     } catch (e) {
       console.warn('[BitXSecurity] Falha na purga do storage:', e);
@@ -142,6 +193,29 @@ class BitXSecurityGuard {
       purgeCompleted: false,
     };
     this.notify();
+  }
+
+  /**
+   * Inicializa ouvintes do ciclo de vida: BFCache, Reload, Visibilidade e Histórico
+   */
+  private initLifecycleGuards(): void {
+    if (typeof window === 'undefined') return;
+
+    // 1. Detecção de BFCache (Back-Forward Cache): disparado quando o usuário usa voltar/avançar
+    window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+      if (event.persisted && !sessionStorage.getItem('bitx_admin_session')) {
+        console.warn('[BitXSecurity] Página restaurada do BFCache.');
+        this.lock('Restauração de Histórico (BFCache detectado - Voltar/Avançar)');
+      }
+    });
+
+    // 2. Proteção contra descarte de aba / suspensão de página
+    window.addEventListener('pagehide', () => {
+      // Se não houver sessão ativa, purga antes que a aba seja descartada
+      if (!sessionStorage.getItem('bitx_admin_session')) {
+        this.purgeSensitiveStorage();
+      }
+    });
   }
 
   public getAbortSignal(): AbortSignal {

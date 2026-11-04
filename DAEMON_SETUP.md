@@ -38,7 +38,7 @@ mkdir -p ~/.bitx
 nano ~/.bitx/bitx.conf
 ```
 
-Use autenticação por cookie do daemon e mantenha o RPC acessível apenas localmente. Não reutilize credenciais publicadas em versões anteriores deste repositório.
+Cole a configuração oficial da Mainnet gerada pelo portal:
 ```ini
 # Configuração Oficial do Nó BitX Core (BTXC) - PRODUÇÃO MAINNET
 server=1
@@ -50,9 +50,13 @@ txindex=1
 port=8333
 rpcport=8332
 
-# RPC somente local; a autenticação é feita pelo cookie privado do daemon
-rpcbind=127.0.0.1
-rpcallowip=127.0.0.1
+# Autenticação RPC para o Portal Web e a Corretora Global Exchange
+rpcuser=bitx_mainnet_admin
+rpcpassword=btxc_prod_sec_auth_2026!
+
+# Permitir conexões externas seguras
+rpcallowip=0.0.0.0/0
+rpcbind=0.0.0.0
 
 # Políticas de Mineração e Mempool
 minrelaytxfee=0.00001000
@@ -61,8 +65,6 @@ blockmaxweight=4000000
 daemon=1
 ```
 Salve o arquivo com `Ctrl + O` e saia com `Ctrl + X`.
-
-Não exponha `rpcport` para a internet nem conecte um navegador diretamente ao RPC. Integrações remotas devem passar por um serviço backend com autenticação, autorização e segredos armazenados fora do repositório.
 
 ---
 

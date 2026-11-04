@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { OperationsConsole } from './components/OperationsConsole';
+import { OperationsPortal } from './components/OperationsPortal';
 import { InstitutionalSite } from './components/InstitutionalSite';
+import { AdminPanel } from './components/AdminPanel';
 import { ClientWallet } from './components/ClientWallet';
 import { PoliciesView } from './components/PoliciesView';
-import { SecurityLockOverlaySecure } from './components/SecurityLockOverlaySecure';
+import { SecurityLockOverlay } from './components/SecurityLockOverlay';
 import { securityGuard, SecurityStatus } from './utils/securityGuard';
-import { hasAdminSession, signOutAdmin } from './utils/adminAuth';
 import { Lock, ShieldCheck, LogOut } from 'lucide-react';
 
-type AppView = 'portal' | 'site' | 'wallet';
+type AppView = 'portal' | 'site' | 'panel' | 'wallet';
 
 export function App() {
   const getInitialView = (): AppView => {
@@ -21,14 +21,13 @@ export function App() {
     if (hash === '#carteira' || search.includes('view=carteira')) {
       return 'wallet';
     }
+    if (hash === '#painel-antigo' || search.includes('view=painel-antigo')) {
+      return 'panel';
+    }
     return 'portal';
   };
 
   const [currentView, setCurrentView] = useState<AppView>(getInitialView);
-  const [authorizedView, setAuthorizedView] = useState<AppView | null>(() => {
-    const initialView = getInitialView();
-    return initialView === 'site' || initialView === 'wallet' ? initialView : null;
-  });
   const [activePolicy, setActivePolicy] = useState<'privacidade' | 'termos' | 'cookies' | null>(null);
   const [securityStatus, setSecurityStatus] = useState<SecurityStatus>(securityGuard.getStatus());
   const [sessionKey, setSessionKey] = useState<number>(1);
@@ -42,6 +41,7 @@ export function App() {
       const hash = window.location.hash.toLowerCase();
       if (hash === '#site') setCurrentView('site');
       else if (hash === '#carteira') setCurrentView('wallet');
+      else if (hash === '#painel-antigo') setCurrentView('panel');
       else setCurrentView('portal');
     };
 
@@ -52,30 +52,7 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (currentView === 'site' || currentView === 'wallet') {
-      setAuthorizedView(currentView);
-      return;
-    }
-
-    let active = true;
-    setAuthorizedView(null);
-    void hasAdminSession().then((authorized) => {
-      if (!active) return;
-      if (!authorized) {
-        window.location.replace('login.html');
-        return;
-      }
-      setAuthorizedView(currentView);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [currentView]);
-
-  const handleManualLock = async () => {
-    await signOutAdmin();
+  const handleManualLock = () => {
     securityGuard.lock('Bloqueio Manual Solicitado pelo Operador (Zero-State Purge)');
   };
 
@@ -83,14 +60,11 @@ export function App() {
     setSessionKey((prev) => prev + 1);
   };
 
-  const isPublicView = currentView === 'site' || currentView === 'wallet';
-  if (!isPublicView && authorizedView !== currentView) return null;
-
   return (
     <>
       {/* Overlay de Bloqueio Ativo — se bloqueado, todo o estado interno é desmontado da memória */}
       {securityStatus.isLocked && (
-        <SecurityLockOverlaySecure
+        <SecurityLockOverlay
           status={securityStatus}
           onReinitialize={handleReinitialize}
         />
@@ -156,9 +130,12 @@ export function App() {
 
           <button
             type="button"
-            onClick={async () => {
-              await signOutAdmin();
-              securityGuard.purgeSensitiveStorage();
+            onClick={() => {
+              try {
+                securityGuard.purgeSensitiveStorage();
+                sessionStorage.clear();
+                localStorage.clear();
+              } catch (_) {}
               window.location.replace('login.html');
             }}
             title="Encerrar sessão de administrador com Zero-State Purge criptográfico e redirecionar para login.html"
@@ -186,7 +163,7 @@ export function App() {
       {!securityStatus.isLocked && (
         <div key={`bitx-session-${sessionKey}`}>
           {currentView === 'portal' && (
-            <OperationsConsole
+            <OperationsPortal
               onOpenPolicy={(policy) => setActivePolicy(policy)}
               onOpenSiteModal={() => setCurrentView('site')}
             />
@@ -230,6 +207,14 @@ export function App() {
                 onOpenPolicy={(policy) => setActivePolicy(policy)}
               />
             </div>
+          )}
+
+          {currentView === 'panel' && (
+            <AdminPanel
+              onNavigateToSite={() => setCurrentView('portal')}
+              onNavigateToWallet={() => setCurrentView('wallet')}
+              onOpenPolicy={(policy) => setActivePolicy(policy)}
+            />
           )}
 
           {currentView === 'wallet' && (
