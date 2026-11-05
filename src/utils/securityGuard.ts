@@ -119,6 +119,8 @@ class BitXSecurityGuard {
         'bitx_desktop_secure_vault_mirror_v1',
         'bitx_ge_admin_operators_v3',
         'bitx_users',
+        'bitx_sec_lockout_record_v1',
+        'bitx_storage_entropy_seed_v1',
       ];
       const protectedValues: Record<string, string> = {};
       protectedKeys.forEach((k) => {

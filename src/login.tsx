@@ -17,6 +17,7 @@ import {
   BadgeCheck,
 } from 'lucide-react';
 import { persistentVault, hashPassword } from './utils/persistentVault';
+import { secureStorage } from './utils/secureStorage';
 import './styles/admin.css';
 
 // Utilitários de Segurança e Sanitização contra Injeção e XSS
@@ -91,82 +92,40 @@ export const LoginPage: React.FC = () => {
   const [currentAdminAuthPass, setCurrentAdminAuthPass] = useState('');
   const [showCurrentAdminPass, setShowCurrentAdminPass] = useState(false);
 
-  // Estados de Rate Limiting e Lockout por Força Bruta
-  // Estados de Rate Limiting e Lockout por Força Bruta com dupla persistência (localStorage + sessionStorage)
-  const getStoredFails = (): number => {
-    try {
-      const ls = parseInt(localStorage.getItem('bitx_sec_fails_count') || '0', 10);
-      const ss = parseInt(sessionStorage.getItem('bitx_sec_fails') || '0', 10);
-      return Math.max(ls, ss);
-    } catch {
-      return 0;
-    }
-  };
-
-  const getStoredLockout = (): number => {
-    try {
-      const ls = parseInt(localStorage.getItem('bitx_sec_lockout_ts') || '0', 10);
-      const ss = parseInt(sessionStorage.getItem('bitx_sec_lockout') || '0', 10);
-      return Math.max(ls, ss);
-    } catch {
-      return 0;
-    }
-  };
-
-  const [failedAttempts, setFailedAttempts] = useState<number>(getStoredFails);
-  const [lockoutUntil, setLockoutUntil] = useState<number>(getStoredLockout);
-  const [lockoutRemaining, setLockoutRemaining] = useState<number>(0);
+  // Estados de Rate Limiting e Lockout por Força Bruta com Armored Secure Storage (Anti-Tampering)
+  const initialLockout = secureStorage.getLockoutStatus(MAX_FAILED_ATTEMPTS);
+  const [failedAttempts, setFailedAttempts] = useState<number>(initialLockout.fails);
+  const [lockoutUntil, setLockoutUntil] = useState<number>(initialLockout.lockoutUntil);
+  const [lockoutRemaining, setLockoutRemaining] = useState<number>(initialLockout.remainingSeconds);
 
   // Estados de erro, sucesso e carregamento
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Efeito de contagem regressiva para Lockout
+  // Efeito de contagem regressiva para Lockout sincronizado com Armored Secure Storage
   useEffect(() => {
     const updateCountdown = () => {
-      const now = Date.now();
-      if (lockoutUntil > now) {
-        setLockoutRemaining(Math.ceil((lockoutUntil - now) / 1000));
-      } else {
-        setLockoutRemaining(0);
-      }
+      const status = secureStorage.getLockoutStatus(MAX_FAILED_ATTEMPTS);
+      setLockoutRemaining(status.remainingSeconds);
+      setFailedAttempts(status.fails);
+      setLockoutUntil(status.lockoutUntil);
     };
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [lockoutUntil]);
+  }, []);
 
   const recordFailedAttempt = (): number => {
-    const nextFails = failedAttempts + 1;
-    setFailedAttempts(nextFails);
-    try {
-      localStorage.setItem('bitx_sec_fails_count', String(nextFails));
-      sessionStorage.setItem('bitx_sec_fails', String(nextFails));
-    } catch {}
-
-    if (nextFails >= MAX_FAILED_ATTEMPTS) {
-      // Escalada progressiva de bloqueio: 5 falhas = 60s; 10+ falhas = 300s (5 minutos)
-      const durationMs = nextFails >= 10 ? 300000 : LOCKOUT_DURATION_MS;
-      const lockTs = Date.now() + durationMs;
-      setLockoutUntil(lockTs);
-      try {
-        localStorage.setItem('bitx_sec_lockout_ts', String(lockTs));
-        sessionStorage.setItem('bitx_sec_lockout', String(lockTs));
-      } catch {}
-    }
-    return nextFails;
+    const status = secureStorage.recordFailedAttempt(MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_MS);
+    setFailedAttempts(status.fails);
+    setLockoutUntil(status.lockoutUntil);
+    setLockoutRemaining(Math.ceil(Math.max(0, status.lockoutUntil - Date.now()) / 1000));
+    return status.fails;
   };
 
   const resetSecurityLockout = () => {
-    try {
-      localStorage.removeItem('bitx_sec_fails_count');
-      localStorage.removeItem('bitx_sec_lockout_ts');
-      sessionStorage.removeItem('bitx_sec_fails');
-      sessionStorage.removeItem('bitx_sec_lockout');
-      sessionStorage.removeItem('bitx_admin_fails');
-      sessionStorage.removeItem('bitx_admin_lockout');
-    } catch {}
+    secureStorage.resetLockout();
     setFailedAttempts(0);
     setLockoutUntil(0);
     setLockoutRemaining(0);
@@ -251,22 +210,27 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // 2. Validar contra usuários locais de contingência com hash SHA-256
+      // 2. Validar contra usuários locais de contingência com hash SHA-256 e selo HMAC
       let localUsers: Record<string, string> = {};
       try {
-        const stored = localStorage.getItem('bitx_users');
-        if (stored) localUsers = JSON.parse(stored);
+        const sealed = secureStorage.getSealed<Record<string, string>>('bitx_users');
+        if (sealed) {
+          localUsers = sealed;
+        } else {
+          const stored = localStorage.getItem('bitx_users');
+          if (stored) localUsers = JSON.parse(stored);
+        }
       } catch (_) {}
 
       const inputHash = hashPassword(p);
       if (localUsers[u] && (localUsers[u] === inputHash || localUsers[u] === p)) {
-        // Se ainda estiver com texto legado, atualiza para hash SHA-256 seguro
+        // Se ainda estiver com texto legado, atualiza para hash SHA-256 seguro selado
         if (localUsers[u] === p) {
           localUsers[u] = inputHash;
-          try {
-            localStorage.setItem('bitx_users', JSON.stringify(localUsers));
-          } catch (_) {}
         }
+        try {
+          secureStorage.setSealed('bitx_users', localUsers);
+        } catch (_) {}
 
         resetSecurityLockout();
 
@@ -459,12 +423,11 @@ export const LoginPage: React.FC = () => {
         currentAdminAuthPassword: currentAdminAuthPass,
       });
 
-      // Salva no registro de usuários apenas o hash SHA-256 (NUNCA senha em texto puro)
+      // Salva no registro de usuários com hash SHA-256 e selo de integridade HMAC-SHA256
       try {
-        const stored = localStorage.getItem('bitx_users');
-        const current = stored ? JSON.parse(stored) : {};
-        current[username] = hashPassword(password);
-        localStorage.setItem('bitx_users', JSON.stringify(current));
+        const stored = secureStorage.getSealed<Record<string, string>>('bitx_users') || {};
+        stored[username] = hashPassword(password);
+        secureStorage.setSealed('bitx_users', stored);
       } catch (_) {}
 
       // Atualiza metadados do cofre

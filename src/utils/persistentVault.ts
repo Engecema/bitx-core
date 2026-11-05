@@ -12,6 +12,7 @@
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { supabase } from './supabase';
+import { secureStorage } from './secureStorage';
 
 export interface GeneralAdminRecord {
   id: string;
@@ -119,12 +120,12 @@ class PersistentDesktopVault {
     // 1. IndexedDB
     this.writeToIndexedDB(this.memoryVault).catch(() => {});
 
-    // 2. LocalStorage Mirror
+    // 2. LocalStorage Mirror (Armored com HMAC-SHA256)
     try {
-      localStorage.setItem(VAULT_LOCAL_PROTECTED_KEY, JSON.stringify(this.memoryVault));
+      secureStorage.setSealed(VAULT_LOCAL_PROTECTED_KEY, this.memoryVault);
     } catch {}
 
-    // 3. bitx_users (Registro de Contingência de Credenciais)
+    // 3. bitx_users (Registro de Contingência de Credenciais Selado com HMAC-SHA256)
     try {
       const geoni = DEFAULT_GEONI_ADMIN;
 
@@ -136,16 +137,23 @@ class PersistentDesktopVault {
       };
 
       // Eliminar explicitamente qualquer outro e-mail residual
-      const stored = localStorage.getItem('bitx_users');
+      const stored = secureStorage.getSealed<Record<string, string>>('bitx_users') || (() => {
+        try {
+          const raw = localStorage.getItem('bitx_users');
+          return raw ? JSON.parse(raw) : null;
+        } catch {
+          return null;
+        }
+      })();
+
       if (stored) {
         try {
-          const parsed = JSON.parse(stored);
-          delete parsed['admin@bitxcore.org'];
-          delete parsed['geonimatos31.nautilus@gmail.com'];
-          delete parsed['geonimatos31@hotmail.com'];
-          delete parsed['operador.geral@bitxcore.org'];
-          delete parsed['bitx_mainnet_admin'];
-          Object.assign(users, parsed);
+          delete stored['admin@bitxcore.org'];
+          delete stored['geonimatos31.nautilus@gmail.com'];
+          delete stored['geonimatos31@hotmail.com'];
+          delete stored['operador.geral@bitxcore.org'];
+          delete stored['bitx_mainnet_admin'];
+          Object.assign(users, stored);
           users['geonimatos31'] = geoni.passwordHash;
           users['geonimatos31@gmail.com'] = geoni.passwordHash;
           users['70781338387'] = geoni.passwordHash;
@@ -157,7 +165,7 @@ class PersistentDesktopVault {
         } catch {}
       }
 
-      localStorage.setItem('bitx_users', JSON.stringify(users));
+      secureStorage.setSealed('bitx_users', users);
     } catch {}
 
     // 4. Portal Operators
@@ -657,15 +665,20 @@ class PersistentDesktopVault {
 
   private syncToPortalOperators(admin: GeneralAdminRecord) {
     try {
-      // Manter sincronizado com bitx_ge_admin_operators_v3
+      // Manter sincronizado com bitx_ge_admin_operators_v3 com selo HMAC
       const key = 'bitx_ge_admin_operators_v3';
       let list: any[] = [];
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) list = parsed;
-        } catch {}
+      const sealed = secureStorage.getSealed<any[]>(key);
+      if (sealed && Array.isArray(sealed)) {
+        list = sealed;
+      } else {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) list = parsed;
+          } catch {}
+        }
       }
       list = list.filter((item) => item.username?.toLowerCase() !== admin.username.toLowerCase());
       list.unshift({
@@ -677,7 +690,7 @@ class PersistentDesktopVault {
         status: admin.status,
         createdAt: new Date(admin.createdAt).toLocaleDateString('pt-BR'),
       });
-      localStorage.setItem(key, JSON.stringify(list));
+      secureStorage.setSealed(key, list);
     } catch {}
   }
 
@@ -734,13 +747,19 @@ class PersistentDesktopVault {
     }
   }
 
-  // --- LocalStorage Mirror ---
+  // --- LocalStorage Mirror com Verificação de Integridade Criptográfica ---
   private readFromLocalStorageMirror(): DesktopVaultFile | null {
     try {
+      const verified = secureStorage.getSealed<DesktopVaultFile>(VAULT_LOCAL_PROTECTED_KEY);
+      if (verified && verified.administrators && Array.isArray(verified.administrators)) {
+        return verified;
+      }
       const raw = localStorage.getItem(VAULT_LOCAL_PROTECTED_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.administrators && Array.isArray(parsed.administrators)) {
+          // Atualiza para formato HMAC selado
+          secureStorage.setSealed(VAULT_LOCAL_PROTECTED_KEY, parsed);
           return parsed as DesktopVaultFile;
         }
       }
