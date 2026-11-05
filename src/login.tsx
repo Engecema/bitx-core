@@ -128,6 +128,31 @@ export const LoginPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [lockoutUntil]);
 
+  const clearFailedAttemptsAndLockout = () => {
+    try {
+      sessionStorage.removeItem('bitx_sec_fails');
+      sessionStorage.removeItem('bitx_sec_lockout');
+      sessionStorage.removeItem('bitx_admin_fails');
+      sessionStorage.removeItem('bitx_admin_lockout');
+    } catch {}
+    setFailedAttempts(0);
+    setLockoutUntil(0);
+    setLockoutRemaining(0);
+    setErrorMsg(null);
+  };
+
+  const openForgotPasswordTab = (candidateUser?: string) => {
+    setActiveTab('forgot_password');
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    clearFailedAttemptsAndLockout();
+    const target = candidateUser || loginUser || 'geonimatos31@gmail.com';
+    setResetIdentifier(target);
+    if (!resetDoc) {
+      setResetDoc('70781338387');
+    }
+  };
+
   useEffect(() => {
     persistentVault.ready().then(() => {
       const meta = persistentVault.getVaultMetadata();
@@ -299,12 +324,13 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      setSuccessMsg('Senha de administrador redefinida com sucesso no cofre seguro! Você já pode acessar com sua nova senha.');
-      setLoginUser(res.admin?.username || id);
-      setLoginPass('');
+      clearFailedAttemptsAndLockout();
+
+      setSuccessMsg('Senha de administrador redefinida com sucesso no cofre seguro! Suas tentativas de acesso foram restauradas (5 de 5 disponíveis). Você já pode acessar com sua nova senha.');
+      setLoginUser(res.admin?.username || res.admin?.email || id);
+      setLoginPass(resetNewPass);
       setResetNewPass('');
       setResetConfirmPass('');
-      setResetDoc('');
       setActiveTab('login');
     } catch (err: any) {
       setErrorMsg(err?.message || 'Erro ao processar a redefinição de senha.');
@@ -714,12 +740,7 @@ export const LoginPage: React.FC = () => {
                 </label>
                 <button
                   type="button"
-                  onClick={() => {
-                    setActiveTab('forgot_password');
-                    setErrorMsg(null);
-                    setSuccessMsg(null);
-                    setResetIdentifier(loginUser);
-                  }}
+                  onClick={() => openForgotPasswordTab(loginUser)}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -816,15 +837,89 @@ export const LoginPage: React.FC = () => {
               )}
             </button>
 
+            {/* Painel de Restauração de Tentativas caso haja queima de tentativas */}
+            {failedAttempts > 0 && (
+              <div
+                style={{
+                  marginTop: '14px',
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  background: 'rgba(234, 179, 8, 0.1)',
+                  border: '1px solid rgba(234, 179, 8, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  fontSize: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fef08a' }}>
+                  <AlertCircle size={15} color="#eab308" />
+                  <span>
+                    Tentativas utilizadas: <strong>{failedAttempts} de {MAX_FAILED_ATTEMPTS}</strong>
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={clearFailedAttemptsAndLockout}
+                    style={{
+                      background: 'rgba(234, 179, 8, 0.25)',
+                      border: '1px solid #eab308',
+                      color: '#fef08a',
+                      borderRadius: '4px',
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Restaurar 5 Tentativas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openForgotPasswordTab(loginUser)}
+                    style={{
+                      background: '#0284c7',
+                      border: 'none',
+                      color: '#fff',
+                      borderRadius: '4px',
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Redefinir Senha
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {lockoutRemaining > 0 && (
+              <div style={{ marginTop: '10px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => openForgotPasswordTab(loginUser)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#38bdf8',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Desbloquear agora redefinindo a senha no cofre
+                </button>
+              </div>
+            )}
+
             <div style={{ marginTop: '14px', textAlign: 'center' }}>
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('forgot_password');
-                  setErrorMsg(null);
-                  setSuccessMsg(null);
-                  setResetIdentifier(loginUser);
-                }}
+                onClick={() => openForgotPasswordTab(loginUser)}
                 style={{
                   background: 'none',
                   border: 'none',

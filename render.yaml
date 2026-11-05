@@ -3,7 +3,7 @@ services:
     name: bitx-core
     runtime: node
     plan: free
-    branch: main-limpo
+    branch: main
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
