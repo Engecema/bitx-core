@@ -14,45 +14,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
-      // PROTEÇÃO ANTI-CLICKJACKING (UI REDRESSING DEFENSE)
       (function() {
         try {
           if (window.top !== window.self) {
             var host = window.location.hostname;
             var isLocalOrDev = host === 'localhost' || host === '127.0.0.1' || host.includes('run.app');
-            if (!isLocalOrDev) {
-              window.top.location = window.self.location;
-            }
+            if (!isLocalOrDev) window.top.location = window.self.location;
           }
         } catch (_) {
           try {
             document.documentElement.style.display = 'none';
             window.top.location = window.self.location;
-          } catch (e) {}
+          } catch (error) {}
         }
-      })();
-
-      (function() {
-        // Se já estiver com sessão válida ativa, redireciona ao painel
-        try {
-          var isAuth = sessionStorage.getItem('bitx_admin_session') === 'active' ||
-                       sessionStorage.getItem('bitx_admin_auth') === 'true';
-          if (isAuth) {
-            window.location.replace("index.html");
-          }
-        } catch (_) {}
-
-        window.addEventListener('pageshow', function(event) {
-          if (event.persisted) {
-            try {
-              var active = sessionStorage.getItem('bitx_admin_session') === 'active' ||
-                           sessionStorage.getItem('bitx_admin_auth') === 'true';
-              if (active) {
-                window.location.replace("index.html");
-              }
-            } catch (_) {}
-          }
-        });
       })();
     </script>
   </head>

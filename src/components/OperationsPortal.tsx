@@ -4,17 +4,6 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { supabase } from '../utils/supabase';
 import { AuditReportModal } from './AuditReportModal';
 
-// Route Guard & Validação Obrigatória de Sessão de Administrador
-if (typeof window !== 'undefined') {
-  const isAuth =
-    sessionStorage.getItem('bitx_admin_session') === 'active' ||
-    sessionStorage.getItem('bitx_admin_auth') === 'true';
-
-  if (!isAuth && !window.location.pathname.endsWith('login.html')) {
-    window.location.replace('login.html');
-  }
-}
-
 interface OperationsPortalProps {
   onOpenPolicy: (policy: 'privacidade' | 'termos' | 'cookies') => void;
   onOpenSiteModal?: () => void;

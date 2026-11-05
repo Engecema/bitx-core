@@ -6,6 +6,7 @@ import { ClientWallet } from './components/ClientWallet';
 import { PoliciesView } from './components/PoliciesView';
 import { SecurityLockOverlay } from './components/SecurityLockOverlay';
 import { securityGuard, SecurityStatus } from './utils/securityGuard';
+import { hasAdminSession, signOutAdmin } from './utils/adminAuth';
 import { Lock, ShieldCheck, LogOut } from 'lucide-react';
 
 type AppView = 'portal' | 'site' | 'panel' | 'wallet';
@@ -31,6 +32,8 @@ export function App() {
   const [activePolicy, setActivePolicy] = useState<'privacidade' | 'termos' | 'cookies' | null>(null);
   const [securityStatus, setSecurityStatus] = useState<SecurityStatus>(securityGuard.getStatus());
   const [sessionKey, setSessionKey] = useState<number>(1);
+  const [adminAccess, setAdminAccess] = useState<'checking' | 'authorized' | 'error'>('checking');
+  const [authError, setAuthError] = useState('');
 
   useEffect(() => {
     const unsubscribe = securityGuard.subscribe((status) => {
@@ -52,16 +55,109 @@ export function App() {
     };
   }, []);
 
-  const handleManualLock = () => {
+  useEffect(() => {
+    if (currentView === 'site' || currentView === 'wallet') return;
+
+    let active = true;
+    setAdminAccess('checking');
+    setAuthError('');
+
+    void hasAdminSession()
+      .then((authorized) => {
+        if (!active) return;
+        if (!authorized) {
+          sessionStorage.removeItem('bitx_admin_session');
+          sessionStorage.removeItem('bitx_admin_auth');
+          window.location.replace('login.html');
+          return;
+        }
+
+        sessionStorage.setItem('bitx_admin_session', 'active');
+        sessionStorage.setItem('bitx_admin_auth', 'true');
+        setAdminAccess('authorized');
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setAuthError(error instanceof Error ? error.message : 'Não foi possível validar a sessão administrativa.');
+        setAdminAccess('error');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentView]);
+
+  const handleManualLock = async () => {
+    try {
+      await signOutAdmin();
+    } catch (error: unknown) {
+      setAuthError(error instanceof Error ? error.message : 'Não foi possível encerrar a sessão administrativa.');
+    }
+    sessionStorage.clear();
     securityGuard.lock('Bloqueio Manual Solicitado pelo Operador (Zero-State Purge)');
   };
 
   const handleReinitialize = () => {
     setSessionKey((prev) => prev + 1);
+    setAdminAccess('checking');
+    setAuthError('');
+
+    void hasAdminSession()
+      .then((authorized) => {
+        if (!authorized) {
+          window.location.replace('login.html');
+          return;
+        }
+        sessionStorage.setItem('bitx_admin_session', 'active');
+        sessionStorage.setItem('bitx_admin_auth', 'true');
+        setAdminAccess('authorized');
+      })
+      .catch((error: unknown) => {
+        setAuthError(error instanceof Error ? error.message : 'Não foi possível validar a sessão administrativa.');
+        setAdminAccess('error');
+      });
   };
+
+  const handleSignOut = async () => {
+    try {
+      await signOutAdmin();
+      sessionStorage.clear();
+      securityGuard.purgeSensitiveStorage();
+      window.location.replace('login.html');
+    } catch (error: unknown) {
+      setAuthError(error instanceof Error ? error.message : 'Não foi possível encerrar a sessão administrativa.');
+    }
+  };
+
+  const isPublicView = currentView === 'site' || currentView === 'wallet';
+  if (!isPublicView && adminAccess !== 'authorized') {
+    return (
+      <main
+        className="admin-theme admin-page-main"
+        style={{ minHeight: '100vh' }}
+        role={adminAccess === 'error' ? 'alert' : 'status'}
+      >
+        <section className="admin-container" style={{ maxWidth: 520 }}>
+          <h1>{adminAccess === 'error' ? 'Falha ao validar acesso' : 'Verificando acesso administrativo'}</h1>
+          <p>
+            {adminAccess === 'error'
+              ? authError
+              : 'Aguarde enquanto confirmamos sua sessão no Supabase.'}
+          </p>
+          {adminAccess === 'error' && <a href="login.html">Voltar ao login</a>}
+        </section>
+      </main>
+    );
+  }
 
   return (
     <>
+      {authError && (
+        <p role="alert" className="admin-error" style={{ margin: 0, padding: '8px 20px', background: '#450a0a' }}>
+          {authError}
+        </p>
+      )}
+
       {/* Overlay de Bloqueio Ativo — se bloqueado, todo o estado interno é desmontado da memória */}
       {securityStatus.isLocked && (
         <SecurityLockOverlay
@@ -108,7 +204,7 @@ export function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            onClick={handleManualLock}
+            onClick={() => void handleManualLock()}
             title="Purga imediata de memória, chaves privadas, storage e bloqueio de tela"
             style={{
               background: '#991b1b',
@@ -130,14 +226,7 @@ export function App() {
 
           <button
             type="button"
-            onClick={() => {
-              try {
-                securityGuard.purgeSensitiveStorage();
-                sessionStorage.clear();
-                localStorage.clear();
-              } catch (_) {}
-              window.location.replace('login.html');
-            }}
+            onClick={() => void handleSignOut()}
             title="Encerrar sessão de administrador com Zero-State Purge criptográfico e redirecionar para login.html"
             style={{
               background: '#7f1d1d',
