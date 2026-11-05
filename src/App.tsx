@@ -133,8 +133,6 @@ export function App() {
             onClick={() => {
               try {
                 securityGuard.purgeSensitiveStorage();
-                sessionStorage.clear();
-                localStorage.clear();
               } catch (_) {}
               window.location.replace('login.html');
             }}

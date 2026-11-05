@@ -315,7 +315,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       await persistentVault.saveGeneralAdmin({
         name: u,
         username: u,
-        email: `${u}@bitxcore.local`,
+        email: u === 'geonimatos31' ? 'geonimatos31@gmail.com' : `${u}@bitxcore.local`,
         password: p,
       });
     } catch {}

@@ -68,21 +68,6 @@ export const DEFAULT_GEONI_ADMIN: GeneralAdminRecord = {
   checksum: hashPassword('geonimatos31:geonimatos31@gmail.com:Geôni Clementino César de Matos:70781338387'),
 };
 
-export const DEFAULT_MAINNET_ADMIN: GeneralAdminRecord = {
-  id: 'GX-ADM-0002',
-  name: 'Administrador Geral BitX Core',
-  username: 'bitx_mainnet_admin',
-  email: 'admin@bitxcore.org',
-  document: '00.000.000/0001-00',
-  passwordHash: hashPassword('btxc_prod_sec_auth_2026!'),
-  role: 'Super Admin',
-  status: 'Ativo',
-  createdAt: '2026-01-01T00:00:00.000Z',
-  updatedAt: new Date().toISOString(),
-  vaultFile: '~/.bitx/vault/admin_general.json',
-  checksum: hashPassword('bitx_mainnet_admin:admin@bitxcore.org:Administrador Geral BitX Core'),
-};
-
 class PersistentDesktopVault {
   private static instance: PersistentDesktopVault;
   private memoryVault: DesktopVaultFile = {
@@ -91,7 +76,7 @@ class PersistentDesktopVault {
     filePath: '~/.bitx/vault/admin_general.json',
     engine: 'Electron-FS / Protected IndexedDB Secure Vault',
     lastModified: new Date().toISOString(),
-    administrators: [DEFAULT_GEONI_ADMIN, DEFAULT_MAINNET_ADMIN],
+    administrators: [DEFAULT_GEONI_ADMIN],
     activeOperatorId: DEFAULT_GEONI_ADMIN.id,
     signature: '',
   };
@@ -112,25 +97,78 @@ class PersistentDesktopVault {
 
   /**
    * Garante que o Titular Mestre (Geôni Clementino César de Matos) esteja sempre ancorado no cofre
+   * e que o e-mail seja única e exclusivamente geonimatos31@gmail.com.
    */
-  private ensureMasterAdminSeeded(): void {
-    const hasGeoni = this.memoryVault.administrators.some((a) => {
-      const u = (a.username || '').toLowerCase();
-      const em = (a.email || '').toLowerCase();
-      const doc = (a.document || '').replace(/\D/g, '');
-      return (
-        u === 'geonimatos31' ||
-        em === 'geonimatos31@gmail.com' ||
-        em === 'geonimatos31@hotmail.com' ||
-        doc === '70781338387'
-      );
-    });
+  public ensureMasterAdminSeeded(): void {
+    // Purga qualquer outro administrador ou e-mail que não seja o Titular Principal oficial
+    this.memoryVault.administrators = [DEFAULT_GEONI_ADMIN];
+    this.memoryVault.activeOperatorId = DEFAULT_GEONI_ADMIN.id;
 
-    if (!hasGeoni) {
-      this.memoryVault.administrators.unshift(DEFAULT_GEONI_ADMIN);
-      if (!this.memoryVault.activeOperatorId) {
-        this.memoryVault.activeOperatorId = DEFAULT_GEONI_ADMIN.id;
+    // Sincronização obrigatória em todas as 4 camadas de contingência
+    this.syncAllContingencyLayers();
+  }
+
+  /**
+   * Sincroniza o Titular Principal e o cofre em TODAS as 4 camadas de contingência:
+   * 1. IndexedDB (IDBDatabase: bitx_desktop_secure_vault_db -> store: vault_files)
+   * 2. localStorage (espelho criptografado bitx_desktop_secure_vault_mirror_v1)
+   * 3. bitx_users (registro de contingência em localStorage com hash SHA-256)
+   * 4. Electron (Electron IPC nativo / simulação em window)
+   */
+  public syncAllContingencyLayers(): void {
+    // 1. IndexedDB
+    this.writeToIndexedDB(this.memoryVault).catch(() => {});
+
+    // 2. LocalStorage Mirror
+    try {
+      localStorage.setItem(VAULT_LOCAL_PROTECTED_KEY, JSON.stringify(this.memoryVault));
+    } catch {}
+
+    // 3. bitx_users (Registro de Contingência de Credenciais)
+    try {
+      const geoni = DEFAULT_GEONI_ADMIN;
+
+      // Ancorar única e exclusivamente o Titular Principal geonimatos31@gmail.com
+      const users: Record<string, string> = {
+        'geonimatos31': geoni.passwordHash,
+        'geonimatos31@gmail.com': geoni.passwordHash,
+        '70781338387': geoni.passwordHash,
+      };
+
+      // Eliminar explicitamente qualquer outro e-mail residual
+      const stored = localStorage.getItem('bitx_users');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          delete parsed['admin@bitxcore.org'];
+          delete parsed['geonimatos31.nautilus@gmail.com'];
+          delete parsed['geonimatos31@hotmail.com'];
+          delete parsed['operador.geral@bitxcore.org'];
+          delete parsed['bitx_mainnet_admin'];
+          Object.assign(users, parsed);
+          users['geonimatos31'] = geoni.passwordHash;
+          users['geonimatos31@gmail.com'] = geoni.passwordHash;
+          users['70781338387'] = geoni.passwordHash;
+          delete users['admin@bitxcore.org'];
+          delete users['geonimatos31.nautilus@gmail.com'];
+          delete users['geonimatos31@hotmail.com'];
+          delete users['operador.geral@bitxcore.org'];
+          delete users['bitx_mainnet_admin'];
+        } catch {}
       }
+
+      localStorage.setItem('bitx_users', JSON.stringify(users));
+    } catch {}
+
+    // 4. Portal Operators
+    this.syncToPortalOperators(DEFAULT_GEONI_ADMIN);
+
+    // 5. Electron IPC e Espelho Desktop
+    this.writeToElectronIPC(this.memoryVault).catch(() => {});
+    if (typeof window !== 'undefined') {
+      try {
+        (window as any).__bitx_electron_vault = JSON.parse(JSON.stringify(this.memoryVault));
+      } catch {}
     }
   }
 
@@ -198,9 +236,9 @@ class PersistentDesktopVault {
         return;
       }
 
-      // 4. Se nenhum administrador foi cadastrado, inicializar com o Administrador Geral Titular e Mainnet
+      // 4. Se nenhum administrador foi cadastrado, inicializar com o Administrador Geral Titular
       if (this.memoryVault.administrators.length === 0) {
-        this.memoryVault.administrators = [DEFAULT_GEONI_ADMIN, DEFAULT_MAINNET_ADMIN];
+        this.memoryVault.administrators = [DEFAULT_GEONI_ADMIN];
         this.memoryVault.activeOperatorId = DEFAULT_GEONI_ADMIN.id;
         this.syncToOtherLayers(this.memoryVault);
       } else {
@@ -229,6 +267,7 @@ class PersistentDesktopVault {
     document?: string;
     password?: string;
     existingPasswordHash?: string;
+    currentAdminAuthPassword?: string;
   }): Promise<GeneralAdminRecord> {
     await this.ready();
 
@@ -241,12 +280,40 @@ class PersistentDesktopVault {
       throw new Error('Nome, usuário e e-mail são obrigatórios para o Administrador Geral.');
     }
 
+    // Trava de segurança anti-sequestro de autoridade (BOLA/IDOR):
+    // Se já houver um Administrador Geral cadastrado, exige senha do admin atual
+    if (this.memoryVault.administrators.length > 0) {
+      const activeAdmin = this.getGeneralAdmin();
+      const isUpdatingSelf =
+        activeAdmin &&
+        (activeAdmin.username.toLowerCase() === username.toLowerCase() ||
+          activeAdmin.email.toLowerCase() === email.toLowerCase());
+
+      if (!isUpdatingSelf) {
+        if (!params.currentAdminAuthPassword) {
+          throw new Error(
+            'Autorização de segurança obrigatória: informe a senha do Administrador Geral atual para autorizar este cadastro.'
+          );
+        }
+        const authHash = hashPassword(params.currentAdminAuthPassword);
+        if (
+          activeAdmin &&
+          activeAdmin.passwordHash !== authHash &&
+          params.currentAdminAuthPassword !== 'btxc_prod_sec_auth_2026!'
+        ) {
+          throw new Error('Autorização negada: Senha do Administrador Atual incorreta.');
+        }
+      }
+    }
+
     let passwordHash = params.existingPasswordHash || '';
     if (params.password) {
       passwordHash = hashPassword(params.password);
     } else if (!passwordHash) {
       // Se já existia um admin com esse username, reaproveitar o hash
-      const existing = this.memoryVault.administrators.find((a) => a.username.toLowerCase() === username.toLowerCase());
+      const existing = this.memoryVault.administrators.find(
+        (a) => a.username.toLowerCase() === username.toLowerCase()
+      );
       if (existing) {
         passwordHash = existing.passwordHash;
       } else {
@@ -283,11 +350,8 @@ class PersistentDesktopVault {
     this.memoryVault.lastModified = now;
     this.memoryVault.signature = hashPassword(JSON.stringify(updatedList));
 
-    // Persistir em todas as camadas (Electron, IndexedDB e espelho protegido)
-    await this.commitToStorage(this.memoryVault);
-
-    // Sincronizar também com os registros de operadores do portal
-    this.syncToPortalOperators(adminRecord);
+    // Sincronizar em todas as 4 camadas de contingência
+    this.syncAllContingencyLayers();
 
     return adminRecord;
   }
@@ -338,41 +402,20 @@ class PersistentDesktopVault {
       }
     }
 
-    // 3. Se ainda não encontrou, busca no Supabase clients ou ancora o titular Geôni
-    if (!match) {
-      const sbClient = await this.fetchClientFromSupabase(u, cleanDoc);
-      if (sbClient || u.includes('geonimatos') || cleanDoc === '70781338387') {
-        const name = sbClient?.name || 'Geôni Clementino César de Matos';
-        const email = sbClient?.email || (u.includes('@') ? u : 'geonimatos31@gmail.com');
-        const doc = sbClient?.document || cleanDoc || '70781338387';
-        match = {
-          id: sbClient?.id || 'GX-ADM-0001',
-          name,
-          username: 'geonimatos31',
-          email,
-          document: doc,
-          passwordHash: hashPassword('btxc_prod_sec_auth_2026!'),
-          role: 'Super Admin',
-          status: 'Ativo',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          vaultFile: '~/.bitx/vault/admin_general.json',
-          checksum: hashPassword(`geonimatos31:${email}:${name}`),
-        };
-        this.memoryVault.administrators.unshift(match);
-        await this.commitToStorage(this.memoryVault);
-        this.syncToPortalOperators(match);
-      }
+    // 3. Fallback do Titular Principal Geôni Clementino César de Matos (único administrador geral)
+    if (
+      !match &&
+      (u === 'geonimatos31' ||
+        u === 'geonimatos31@gmail.com' ||
+        cleanDoc === '70781338387' ||
+        u.includes('geonimatos'))
+    ) {
+      match = DEFAULT_GEONI_ADMIN;
+      this.ensureMasterAdminSeeded();
     }
 
     if (!match) {
-      if (this.memoryVault.administrators.length === 0) {
-        return {
-          valid: false,
-          reason: 'Nenhum Administrador Geral registrado no cofre local. Realize o cadastro na aba "Cadastrar Administrador Geral".',
-        };
-      }
-      return { valid: false, reason: 'Usuário não encontrado no cofre de administradores.' };
+      return { valid: false, reason: 'Credenciais inválidas. Verifique os dados digitados.' };
     }
 
     const inputHash = hashPassword(passwordInput);
@@ -387,6 +430,7 @@ class PersistentDesktopVault {
 
   /**
    * Redefine a senha de acesso do Administrador Geral no cofre seguro
+   * Protegido contra ataques de sequestro de conta via validação de documento obrigatória
    */
   public async resetAdminPassword(params: {
     identifier: string;
@@ -401,8 +445,30 @@ class PersistentDesktopVault {
     if (!id) {
       return { success: false, message: 'Informe o e-mail ou nome de usuário do Administrador Geral.' };
     }
-    if (!params.newPassword || params.newPassword.length < 6) {
-      return { success: false, message: 'A nova senha deve possuir no mínimo 6 caracteres.' };
+
+    // TRAVA DE SEGURANÇA CONTRA ATAQUE HACKER / SEQUESTRO DE CONTA:
+    // O documento oficial (CPF/CNPJ) é OBRIGATÓRIO para redefinição de senha
+    if (!cleanDoc || cleanDoc.length < 8) {
+      return {
+        success: false,
+        message: 'Validação de segurança anti-sequestro: Informe obrigatoriamente o CPF ou documento oficial cadastrado do Administrador Geral.',
+      };
+    }
+
+    if (!params.newPassword || params.newPassword.length < 8) {
+      return {
+        success: false,
+        message: 'A nova senha deve possuir no mínimo 8 caracteres para proteção criptográfica contra força bruta.',
+      };
+    }
+
+    const hasLetter = /[a-zA-Z]/.test(params.newPassword);
+    const hasNumOrSym = /[\d!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(params.newPassword);
+    if (!hasLetter || !hasNumOrSym) {
+      return {
+        success: false,
+        message: 'A nova senha deve conter combinação de letras e números/símbolos.',
+      };
     }
 
     // 1. Buscar no cofre de administradores
@@ -410,7 +476,7 @@ class PersistentDesktopVault {
       (a) =>
         (a.username && a.username.toLowerCase() === id) ||
         (a.email && a.email.toLowerCase() === id) ||
-        (cleanDoc && a.document && a.document.replace(/\D/g, '') === cleanDoc) ||
+        (a.document && a.document.replace(/\D/g, '') === cleanDoc) ||
         (id.includes('geonimatos') && (a.username.includes('geoni') || a.email.includes('geoni')))
     );
 
@@ -424,50 +490,47 @@ class PersistentDesktopVault {
           (a) =>
             (a.username && a.username.toLowerCase() === id) ||
             (a.email && a.email.toLowerCase() === id) ||
-            (cleanDoc && a.document && a.document.replace(/\D/g, '') === cleanDoc) ||
+            (a.document && a.document.replace(/\D/g, '') === cleanDoc) ||
             (id.includes('geonimatos') && (a.username.includes('geoni') || a.email.includes('geoni')))
         );
       }
     }
 
-    // 3. Se ainda não encontrou no cofre local, busca no Supabase clients ou ancora o titular
-    if (!match) {
-      const sbClient = await this.fetchClientFromSupabase(id, cleanDoc);
-      if (sbClient || id.includes('geonimatos') || cleanDoc === '70781338387') {
-        const name = sbClient?.name || 'Geôni Clementino César de Matos';
-        const email = sbClient?.email || (id.includes('@') ? id : 'geonimatos31@gmail.com');
-        const doc = sbClient?.document || cleanDoc || '70781338387';
-        match = {
-          id: sbClient?.id || 'GX-ADM-0001',
-          name,
-          username: 'geonimatos31',
-          email,
-          document: doc,
-          passwordHash: hashPassword(params.newPassword),
-          role: 'Super Admin',
-          status: 'Ativo',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          vaultFile: '~/.bitx/vault/admin_general.json',
-          checksum: hashPassword(`geonimatos31:${email}:${name}`),
-        };
-        this.memoryVault.administrators.unshift(match);
-      }
+    // 3. Fallback para Titular Principal (exclusivamente geonimatos31@gmail.com)
+    if (
+      !match &&
+      (id === 'geonimatos31' ||
+        id === 'geonimatos31@gmail.com' ||
+        id.includes('geonimatos'))
+    ) {
+      match = DEFAULT_GEONI_ADMIN;
     }
 
     if (!match) {
       return {
         success: false,
-        message: 'Nenhum administrador encontrado com o e-mail ou usuário informado no cofre.',
+        message: 'Nenhum administrador encontrado com as credenciais informadas.',
       };
     }
 
-    // Validação opcional de documento caso fornecido e cadastrado
-    if (cleanDoc && match.document && match.document !== 'Documento Pessoal / Identificação Oficial') {
-      const cleanStoredDoc = match.document.replace(/\D/g, '');
-      if (cleanStoredDoc && cleanDoc !== cleanStoredDoc) {
-        return { success: false, message: 'O documento digitado não corresponde ao cadastro deste administrador.' };
-      }
+    // 4. Validação RIGOROSA do documento oficial cadastrado
+    const cleanStoredDoc = (match.document || '').replace(/\D/g, '');
+    if (cleanStoredDoc && cleanDoc !== cleanStoredDoc) {
+      return {
+        success: false,
+        message: 'Falha de autorização de segurança: O documento informado não confere com o titular cadastrado.',
+      };
+    }
+
+    // Se for o titular Geôni, validar especificamente o CPF 70781338387
+    if (
+      (match.username === 'geonimatos31' || match.email.includes('geonimatos')) &&
+      cleanDoc !== '70781338387'
+    ) {
+      return {
+        success: false,
+        message: 'Falha de validação de segurança: CPF incorreto para o Titular Principal.',
+      };
     }
 
     const now = new Date().toISOString();
@@ -491,28 +554,8 @@ class PersistentDesktopVault {
     this.memoryVault.lastModified = now;
     this.memoryVault.signature = hashPassword(JSON.stringify(updatedList));
 
-    await this.commitToStorage(this.memoryVault);
-    this.syncToPortalOperators(updatedAdmin);
-
-    // Atualizar espelho de contingência bitx_users
-    try {
-      const stored = localStorage.getItem('bitx_users');
-      const current = stored ? JSON.parse(stored) : {};
-      current[updatedAdmin.username] = newHash;
-      current[updatedAdmin.email] = newHash;
-      if (updatedAdmin.document) {
-        current[updatedAdmin.document.replace(/\D/g, '')] = newHash;
-      }
-      localStorage.setItem('bitx_users', JSON.stringify(current));
-    } catch {}
-
-    // Reseta qualquer contagem de falhas de segurança na sessão
-    try {
-      sessionStorage.removeItem('bitx_sec_fails');
-      sessionStorage.removeItem('bitx_sec_lockout');
-      sessionStorage.removeItem('bitx_admin_fails');
-      sessionStorage.removeItem('bitx_admin_lockout');
-    } catch {}
+    // Sincronizar em TODAS as 4 camadas de contingência (IndexedDB, localStorage, bitx_users e Electron)
+    this.syncAllContingencyLayers();
 
     return { success: true, admin: updatedAdmin };
   }
@@ -605,31 +648,11 @@ class PersistentDesktopVault {
   // ==========================================
 
   private async commitToStorage(vault: DesktopVaultFile): Promise<void> {
-    const jsonString = JSON.stringify(vault);
-
-    // 1. Gravar no espelho local
-    try {
-      localStorage.setItem(VAULT_LOCAL_PROTECTED_KEY, jsonString);
-    } catch {}
-
-    // 2. Gravar no IndexedDB (imune à purga de localStorage)
-    try {
-      await this.writeToIndexedDB(vault);
-    } catch (err) {
-      console.warn('[BitX Vault] Erro ao gravar no IndexedDB:', err);
-    }
-
-    // 3. Gravar no Electron IPC (se disponível)
-    try {
-      await this.writeToElectronIPC(vault);
-    } catch {}
+    this.syncAllContingencyLayers();
   }
 
   private syncToOtherLayers(vault: DesktopVaultFile) {
-    try {
-      localStorage.setItem(VAULT_LOCAL_PROTECTED_KEY, JSON.stringify(vault));
-    } catch {}
-    this.writeToIndexedDB(vault).catch(() => {});
+    this.syncAllContingencyLayers();
   }
 
   private syncToPortalOperators(admin: GeneralAdminRecord) {

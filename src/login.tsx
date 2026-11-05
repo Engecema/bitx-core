@@ -92,20 +92,29 @@ export const LoginPage: React.FC = () => {
   const [showCurrentAdminPass, setShowCurrentAdminPass] = useState(false);
 
   // Estados de Rate Limiting e Lockout por Força Bruta
-  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+  // Estados de Rate Limiting e Lockout por Força Bruta com dupla persistência (localStorage + sessionStorage)
+  const getStoredFails = (): number => {
     try {
-      return parseInt(sessionStorage.getItem('bitx_sec_fails') || '0', 10);
+      const ls = parseInt(localStorage.getItem('bitx_sec_fails_count') || '0', 10);
+      const ss = parseInt(sessionStorage.getItem('bitx_sec_fails') || '0', 10);
+      return Math.max(ls, ss);
     } catch {
       return 0;
     }
-  });
-  const [lockoutUntil, setLockoutUntil] = useState<number>(() => {
+  };
+
+  const getStoredLockout = (): number => {
     try {
-      return parseInt(sessionStorage.getItem('bitx_sec_lockout') || '0', 10);
+      const ls = parseInt(localStorage.getItem('bitx_sec_lockout_ts') || '0', 10);
+      const ss = parseInt(sessionStorage.getItem('bitx_sec_lockout') || '0', 10);
+      return Math.max(ls, ss);
     } catch {
       return 0;
     }
-  });
+  };
+
+  const [failedAttempts, setFailedAttempts] = useState<number>(getStoredFails);
+  const [lockoutUntil, setLockoutUntil] = useState<number>(getStoredLockout);
   const [lockoutRemaining, setLockoutRemaining] = useState<number>(0);
 
   // Estados de erro, sucesso e carregamento
@@ -128,8 +137,31 @@ export const LoginPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [lockoutUntil]);
 
-  const clearFailedAttemptsAndLockout = () => {
+  const recordFailedAttempt = (): number => {
+    const nextFails = failedAttempts + 1;
+    setFailedAttempts(nextFails);
     try {
+      localStorage.setItem('bitx_sec_fails_count', String(nextFails));
+      sessionStorage.setItem('bitx_sec_fails', String(nextFails));
+    } catch {}
+
+    if (nextFails >= MAX_FAILED_ATTEMPTS) {
+      // Escalada progressiva de bloqueio: 5 falhas = 60s; 10+ falhas = 300s (5 minutos)
+      const durationMs = nextFails >= 10 ? 300000 : LOCKOUT_DURATION_MS;
+      const lockTs = Date.now() + durationMs;
+      setLockoutUntil(lockTs);
+      try {
+        localStorage.setItem('bitx_sec_lockout_ts', String(lockTs));
+        sessionStorage.setItem('bitx_sec_lockout', String(lockTs));
+      } catch {}
+    }
+    return nextFails;
+  };
+
+  const resetSecurityLockout = () => {
+    try {
+      localStorage.removeItem('bitx_sec_fails_count');
+      localStorage.removeItem('bitx_sec_lockout_ts');
       sessionStorage.removeItem('bitx_sec_fails');
       sessionStorage.removeItem('bitx_sec_lockout');
       sessionStorage.removeItem('bitx_admin_fails');
@@ -138,19 +170,16 @@ export const LoginPage: React.FC = () => {
     setFailedAttempts(0);
     setLockoutUntil(0);
     setLockoutRemaining(0);
-    setErrorMsg(null);
   };
 
   const openForgotPasswordTab = (candidateUser?: string) => {
     setActiveTab('forgot_password');
     setErrorMsg(null);
     setSuccessMsg(null);
-    clearFailedAttemptsAndLockout();
-    const target = candidateUser || loginUser || 'geonimatos31@gmail.com';
+    // NÃO limpa tentativas e NÃO pré-preenche dados confidenciais (evita vazamento de CPF)
+    const target = candidateUser || loginUser || '';
     setResetIdentifier(target);
-    if (!resetDoc) {
-      setResetDoc('70781338387');
-    }
+    setResetDoc('');
   };
 
   useEffect(() => {
@@ -199,10 +228,7 @@ export const LoginPage: React.FC = () => {
       const vaultRes = await persistentVault.validateAdminLogin(u, p);
       if (vaultRes.valid) {
         // Sucesso: zerar contadores de Rate Limiting
-        sessionStorage.removeItem('bitx_sec_fails');
-        sessionStorage.removeItem('bitx_sec_lockout');
-        setFailedAttempts(0);
-        setLockoutUntil(0);
+        resetSecurityLockout();
 
         setSuccessMsg('Autenticação autorizada! Redirecionando para o painel...');
         sessionStorage.setItem('bitx_admin_session', 'active');
@@ -242,10 +268,7 @@ export const LoginPage: React.FC = () => {
           } catch (_) {}
         }
 
-        sessionStorage.removeItem('bitx_sec_fails');
-        sessionStorage.removeItem('bitx_sec_lockout');
-        setFailedAttempts(0);
-        setLockoutUntil(0);
+        resetSecurityLockout();
 
         setSuccessMsg('Autenticação autorizada! Redirecionando para o painel...');
         sessionStorage.setItem('bitx_admin_session', 'active');
@@ -269,21 +292,16 @@ export const LoginPage: React.FC = () => {
       }
 
       // Falha de login: aciona Rate Limiting progressivo
-      const newFails = failedAttempts + 1;
-      setFailedAttempts(newFails);
-      sessionStorage.setItem('bitx_sec_fails', String(newFails));
-
+      const newFails = recordFailedAttempt();
       if (newFails >= MAX_FAILED_ATTEMPTS) {
-        const lock = Date.now() + LOCKOUT_DURATION_MS;
-        setLockoutUntil(lock);
-        sessionStorage.setItem('bitx_sec_lockout', String(lock));
         setErrorMsg(`Limite de ${MAX_FAILED_ATTEMPTS} tentativas consecutivas excedido. Acesso suspenso por 60 segundos.`);
       } else {
         setErrorMsg(
-          `${vaultRes.reason || 'Credenciais inválidas. Verifique os dados digitados.'} (${MAX_FAILED_ATTEMPTS - newFails} tentativas restantes)`
+          `Credenciais inválidas. Verifique os dados digitados. (${MAX_FAILED_ATTEMPTS - newFails} tentativas restantes)`
         );
       }
     } catch (err: any) {
+      recordFailedAttempt();
       setErrorMsg(err?.message || 'Falha na validação de credenciais.');
     } finally {
       setIsSubmitting(false);
@@ -295,14 +313,36 @@ export const LoginPage: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    // 1. Verificação de Trava contra Força Bruta
+    const now = Date.now();
+    if (lockoutUntil > now) {
+      const remainingSecs = Math.ceil((lockoutUntil - now) / 1000);
+      setErrorMsg(`Acesso suspenso por segurança devido ao excesso de tentativas. Aguarde ${remainingSecs}s.`);
+      return;
+    }
+
     const id = sanitizeInput(resetIdentifier);
+    const doc = sanitizeInput(resetDoc);
+
     if (!id) {
       setErrorMsg('Informe o e-mail ou nome de usuário do Administrador Geral.');
       return;
     }
 
-    if (!resetNewPass || resetNewPass.length < 6) {
-      setErrorMsg('A nova senha deve possuir no mínimo 6 caracteres.');
+    if (!doc || doc.replace(/\D/g, '').length < 8) {
+      setErrorMsg('Informe obrigatoriamente o CPF ou documento oficial cadastrado do Titular.');
+      return;
+    }
+
+    if (!resetNewPass || resetNewPass.length < 8) {
+      setErrorMsg('A nova senha deve possuir no mínimo 8 caracteres para proteção criptográfica.');
+      return;
+    }
+
+    const hasLetter = /[a-zA-Z]/.test(resetNewPass);
+    const hasNumOrSym = /[\d!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(resetNewPass);
+    if (!hasLetter || !hasNumOrSym) {
+      setErrorMsg('A nova senha deve conter combinação de letras e números/símbolos.');
       return;
     }
 
@@ -312,27 +352,36 @@ export const LoginPage: React.FC = () => {
     }
 
     setIsResetting(true);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
     try {
       const res = await persistentVault.resetAdminPassword({
         identifier: id,
-        document: sanitizeInput(resetDoc),
+        document: doc,
         newPassword: resetNewPass,
       });
 
       if (!res.success) {
-        setErrorMsg(res.message || 'Falha ao redefinir a senha de acesso.');
+        const fails = recordFailedAttempt();
+        if (fails >= MAX_FAILED_ATTEMPTS) {
+          setErrorMsg(`Tentativas excedidas. Acesso suspenso por 60 segundos.`);
+        } else {
+          setErrorMsg(`${res.message || 'Falha ao redefinir a senha de acesso.'} (${MAX_FAILED_ATTEMPTS - fails} tentativas restantes)`);
+        }
         return;
       }
 
-      clearFailedAttemptsAndLockout();
+      resetSecurityLockout();
 
-      setSuccessMsg('Senha de administrador redefinida com sucesso no cofre seguro! Suas tentativas de acesso foram restauradas (5 de 5 disponíveis). Você já pode acessar com sua nova senha.');
+      setSuccessMsg('Senha de administrador redefinida com sucesso no cofre seguro! Suas credenciais foram atualizadas em todas as camadas de contingência (IndexedDB, localStorage, bitx_users e Electron).');
       setLoginUser(res.admin?.username || res.admin?.email || id);
       setLoginPass(resetNewPass);
       setResetNewPass('');
       setResetConfirmPass('');
+      setResetDoc('');
       setActiveTab('login');
     } catch (err: any) {
+      recordFailedAttempt();
       setErrorMsg(err?.message || 'Erro ao processar a redefinição de senha.');
     } finally {
       setIsResetting(false);
@@ -407,6 +456,7 @@ export const LoginPage: React.FC = () => {
         email,
         username,
         password,
+        currentAdminAuthPassword: currentAdminAuthPass,
       });
 
       // Salva no registro de usuários apenas o hash SHA-256 (NUNCA senha em texto puro)
@@ -837,8 +887,8 @@ export const LoginPage: React.FC = () => {
               )}
             </button>
 
-            {/* Painel de Restauração de Tentativas caso haja queima de tentativas */}
-            {failedAttempts > 0 && (
+            {/* Painel Informativo de Segurança e Rate Limiting */}
+            {failedAttempts > 0 && lockoutRemaining === 0 && (
               <div
                 style={{
                   marginTop: '14px',
@@ -848,71 +898,14 @@ export const LoginPage: React.FC = () => {
                   border: '1px solid rgba(234, 179, 8, 0.35)',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
+                  gap: '10px',
                   fontSize: '12px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fef08a' }}>
-                  <AlertCircle size={15} color="#eab308" />
-                  <span>
-                    Tentativas utilizadas: <strong>{failedAttempts} de {MAX_FAILED_ATTEMPTS}</strong>
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={clearFailedAttemptsAndLockout}
-                    style={{
-                      background: 'rgba(234, 179, 8, 0.25)',
-                      border: '1px solid #eab308',
-                      color: '#fef08a',
-                      borderRadius: '4px',
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Restaurar 5 Tentativas
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openForgotPasswordTab(loginUser)}
-                    style={{
-                      background: '#0284c7',
-                      border: 'none',
-                      color: '#fff',
-                      borderRadius: '4px',
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Redefinir Senha
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {lockoutRemaining > 0 && (
-              <div style={{ marginTop: '10px', textAlign: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => openForgotPasswordTab(loginUser)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#38bdf8',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  Desbloquear agora redefinindo a senha no cofre
-                </button>
+                <AlertCircle size={15} color="#eab308" style={{ flexShrink: 0 }} />
+                <span style={{ color: '#fef08a' }}>
+                  Tentativas incorretas: <strong>{failedAttempts} de {MAX_FAILED_ATTEMPTS}</strong>. Por segurança, o sistema suspende temporariamente acessos após {MAX_FAILED_ATTEMPTS} falhas consecutivas.
+                </span>
               </div>
             )}
 
@@ -1383,7 +1376,7 @@ export const LoginPage: React.FC = () => {
                   background: 'transparent',
                 }}
               >
-                Documento Oficial (CPF / CNPJ) — Opcional se cadastrado:
+                Documento Oficial (CPF / CNPJ) Obrigatório do Titular:
               </label>
               <div style={{ position: 'relative', background: 'transparent' }}>
                 <input
@@ -1391,7 +1384,8 @@ export const LoginPage: React.FC = () => {
                   value={resetDoc}
                   onChange={(e) => setResetDoc(e.target.value)}
                   autoComplete="off"
-                  placeholder=""
+                  placeholder="Informe o CPF/documento cadastrado"
+                  required
                   className="auth-input-clean"
                   style={{
                     width: '100%',
@@ -1414,7 +1408,7 @@ export const LoginPage: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '22px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                  Nova Senha:
+                  Nova Senha (mín. 8 caracteres):
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
