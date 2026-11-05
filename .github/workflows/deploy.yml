@@ -2,7 +2,7 @@ name: Deploy BitX Core Website
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main-limpo", "main"]
   workflow_dispatch:
 
 permissions:
