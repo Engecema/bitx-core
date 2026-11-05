@@ -2,6 +2,46 @@ import React, { useState, useEffect } from 'react';
 import '../styles/admin.css';
 import { persistentVault, hashPassword } from '../utils/persistentVault';
 
+// ============================================================================
+// BITX CORE — ROUTE GUARD & VALIDAÇÃO RÍGIDA DE SESSÃO DO ADMINISTRADOR
+// ============================================================================
+// Execução obrigatória imediatamente no topo do arquivo e no evento DOMContentLoaded
+// antes de renderizar qualquer elemento visual na tela para impedir o acesso direto via URL.
+if (typeof window !== 'undefined') {
+  const enforceAdminRouteGuard = () => {
+    try {
+      const isAuth =
+        sessionStorage.getItem('bitx_admin_session') === 'active' ||
+        sessionStorage.getItem('bitx_admin_auth') === 'true';
+
+      if (!isAuth) {
+        if (!window.location.pathname.endsWith('login.html')) {
+          window.location.replace('login.html');
+        }
+      }
+    } catch (_) {
+      if (!window.location.pathname.endsWith('login.html')) {
+        window.location.replace('login.html');
+      }
+    }
+  };
+
+  // 1. Verificação imediata no topo do arquivo
+  enforceAdminRouteGuard();
+
+  // 2. Verificação no evento DOMContentLoaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', enforceAdminRouteGuard);
+  }
+
+  // 3. Proteção contra restauração de BFCache (Voltar / Avançar / Recarregar)
+  window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+    if (event.persisted) {
+      enforceAdminRouteGuard();
+    }
+  });
+}
+
 interface AdminPanelProps {
   onNavigateToSite: () => void;
   onNavigateToWallet: () => void;

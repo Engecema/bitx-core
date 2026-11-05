@@ -16,7 +16,7 @@ const securityHeaders = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
-  'Content-Security-Policy': "frame-ancestors 'self' https://*.run.app https://*.google.com https://aistudio.google.com;",
+  'Content-Security-Policy': "frame-ancestors 'self' https://*.run.app https://*.google.com https://aistudio.google.com https://*.googleusercontent.com;",
 };
 
 export default defineConfig({

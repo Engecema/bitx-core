@@ -33,14 +33,6 @@ npm run dev
 
 A aplicação roda em `http://localhost:3000`.
 
-## Acesso Administrativo
-
-O painel administrativo autentica pelo Supabase Auth usando e-mail e senha. Além de uma conta ativa, o usuário precisa receber `app_metadata.role = "admin"` por um processo confiável no Supabase; criar uma conta de usuário, por si só, não concede acesso administrativo. Não coloque a chave `service_role` no frontend.
-
-Sem uma sessão administrativa válida, o acesso ao painel é redirecionado para `login.html`. Falhas de conexão ou contas sem a função administrativa são apresentadas na tela de login, sem conceder acesso ao painel.
-
-O link **Esqueci minha senha** envia uma solicitação de redefinição pelo Supabase Auth. Configure o provedor de e-mail e inclua a URL de redirecionamento `https://seu-dominio/login.html?flow=recovery` em **Authentication → URL Configuration → Redirect URLs** do projeto Supabase. Depois de abrir o link recebido, o administrador define uma nova senha na própria página de login.
-
 ## Build para Produção & GitHub Pages
 
 ```bash

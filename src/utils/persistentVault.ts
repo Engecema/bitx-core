@@ -274,6 +274,77 @@ class PersistentDesktopVault {
   }
 
   /**
+   * Redefine a senha de acesso do Administrador Geral no cofre seguro
+   */
+  public async resetAdminPassword(params: {
+    identifier: string;
+    document?: string;
+    newPassword: string;
+  }): Promise<{ success: boolean; admin?: GeneralAdminRecord; message?: string }> {
+    await this.ready();
+
+    const id = (params.identifier || '').trim().toLowerCase();
+    if (!id) {
+      return { success: false, message: 'Informe o e-mail ou nome de usuário do Administrador Geral.' };
+    }
+    if (!params.newPassword || params.newPassword.length < 6) {
+      return { success: false, message: 'A nova senha deve possuir no mínimo 6 caracteres.' };
+    }
+
+    // Buscar no cofre de administradores
+    let match = this.memoryVault.administrators.find(
+      (a) => a.username.toLowerCase() === id || a.email.toLowerCase() === id
+    );
+
+    if (!match) {
+      const idbData = await this.readFromIndexedDB();
+      if (idbData && idbData.administrators?.length > 0) {
+        this.memoryVault = idbData;
+        match = this.memoryVault.administrators.find(
+          (a) => a.username.toLowerCase() === id || a.email.toLowerCase() === id
+        );
+      }
+    }
+
+    if (!match) {
+      return {
+        success: false,
+        message: 'Nenhum administrador encontrado com o e-mail ou usuário informado no cofre.',
+      };
+    }
+
+    // Validação opcional de documento caso fornecido e cadastrado
+    if (params.document && match.document && match.document !== 'Documento Pessoal / Identificação Oficial') {
+      const cleanInputDoc = params.document.replace(/\D/g, '');
+      const cleanStoredDoc = match.document.replace(/\D/g, '');
+      if (cleanInputDoc && cleanStoredDoc && cleanInputDoc !== cleanStoredDoc) {
+        return { success: false, message: 'O documento digitado não corresponde ao cadastro deste administrador.' };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const updatedAdmin: GeneralAdminRecord = {
+      ...match,
+      passwordHash: hashPassword(params.newPassword),
+      updatedAt: now,
+      checksum: hashPassword(`${match.username}:${match.email}:${match.name}:${now}`),
+    };
+
+    const updatedList = this.memoryVault.administrators.map((a) =>
+      a.id === match.id ? updatedAdmin : a
+    );
+
+    this.memoryVault.administrators = updatedList;
+    this.memoryVault.lastModified = now;
+    this.memoryVault.signature = hashPassword(JSON.stringify(updatedList));
+
+    await this.commitToStorage(this.memoryVault);
+    this.syncToPortalOperators(updatedAdmin);
+
+    return { success: true, admin: updatedAdmin };
+  }
+
+  /**
    * Retorna o Administrador Geral ativo
    */
   public getGeneralAdmin(): GeneralAdminRecord | null {

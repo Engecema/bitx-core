@@ -16,19 +16,58 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
+      // PROTEÇÃO ANTI-CLICKJACKING (UI REDRESSING DEFENSE)
       (function() {
         try {
           if (window.top !== window.self) {
             var host = window.location.hostname;
-            var isLocalOrDev = host === 'localhost' || host === '127.0.0.1' || host.includes('run.app');
-            if (!isLocalOrDev) window.top.location = window.self.location;
+            var isLocalOrDev = host === 'localhost' || host === '127.0.0.1' || host.includes('run.app') || host.includes('google');
+            if (!isLocalOrDev) {
+              try {
+                window.top.location = window.self.location;
+              } catch (_) {}
+            }
           }
-        } catch (_) {
+        } catch (_) {}
+      })();
+
+      // ROUTE GUARD & VALIDAÇÃO RÍGIDA DE SESSÃO DO ADMINISTRADOR
+      // Impede o acesso direto via URL e purga dados caso não autenticado
+      (function() {
+        function enforceAdminGuard() {
           try {
-            document.documentElement.style.display = 'none';
-            window.top.location = window.self.location;
-          } catch (error) {}
+            var isAuth = sessionStorage.getItem('bitx_admin_session') === 'active' ||
+                         sessionStorage.getItem('bitx_admin_auth') === 'true';
+            var isPublic = window.location.hash === '#site' ||
+                           window.location.hash === '#carteira' ||
+                           window.location.search.indexOf('view=site') !== -1 ||
+                           window.location.search.indexOf('view=carteira') !== -1;
+            if (!isAuth && !isPublic) {
+              if (!window.location.pathname.endsWith('login.html')) {
+                window.location.replace("login.html");
+              }
+            }
+          } catch (_) {
+            if (!window.location.pathname.endsWith('login.html')) {
+              window.location.replace("login.html");
+            }
+          }
         }
+
+        // Verificação imediata síncrona
+        enforceAdminGuard();
+
+        // Verificação obrigatória no evento DOMContentLoaded
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', enforceAdminGuard);
+        }
+
+        // Proteção contra restauração de BFCache (Voltar / Avançar / Recarregar)
+        window.addEventListener('pageshow', function(event) {
+          if (event.persisted) {
+            enforceAdminGuard();
+          }
+        });
       })();
     </script>
   </head>
